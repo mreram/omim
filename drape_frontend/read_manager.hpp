@@ -10,7 +10,6 @@
 
 #include "drape/object_pool.hpp"
 #include "drape/pointers.hpp"
-#include "drape/texture_manager.hpp"
 
 #include "base/thread_pool.hpp"
 
@@ -20,11 +19,16 @@
 #include "std/shared_ptr.hpp"
 #include "std/target_os.hpp"
 
+namespace dp
+{
+class TextureManager;
+}  // namespace dp
+
 namespace df
 {
-
 class MapDataProvider;
 class CoverageUpdateDescriptor;
+class MetalineManager;
 
 class ReadManager
 {
@@ -33,7 +37,8 @@ public:
               bool allow3dBuildings, bool trafficEnabled);
 
   void UpdateCoverage(ScreenBase const & screen, bool have3dBuildings, bool forceUpdate,
-                      TTilesCollection const & tiles, ref_ptr<dp::TextureManager> texMng);
+                      TTilesCollection const & tiles, ref_ptr<dp::TextureManager> texMng,
+                      ref_ptr<MetalineManager> metalineMng);
   void Invalidate(TTilesCollection const & keyStorage);
   void InvalidateAll();
   void Stop();
@@ -53,7 +58,8 @@ private:
   void OnTaskFinished(threads::IRoutine * task);
   bool MustDropAllTiles(ScreenBase const & screen) const;
 
-  void PushTaskBackForTileKey(TileKey const & tileKey, ref_ptr<dp::TextureManager> texMng);
+  void PushTaskBackForTileKey(TileKey const & tileKey, ref_ptr<dp::TextureManager> texMng,
+                              ref_ptr<MetalineManager> metalineMng);
 
   ref_ptr<ThreadsCommutator> m_commutator;
 

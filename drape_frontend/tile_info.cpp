@@ -1,6 +1,7 @@
 #include "drape_frontend/drape_measurer.hpp"
 #include "drape_frontend/engine_context.hpp"
 #include "drape_frontend/map_data_provider.hpp"
+#include "drape_frontend/metaline_manager.hpp"
 #include "drape_frontend/rule_drawer.hpp"
 #include "drape_frontend/stylist.hpp"
 #include "drape_frontend/tile_info.hpp"
@@ -76,6 +77,7 @@ void TileInfo::ReadFeatures(MapDataProvider const & model)
                       bind(&TileInfo::IsCancelled, this),
                       model.m_isCountryLoadedByName,
                       make_ref(m_context), m_customSymbolsContext.lock(),
+                      m_context->GetMetalineManager()->GetMetalines(m_featureInfo),
                       m_is3dBuildings, m_trafficEnabled);
     model.ReadFeatures(bind<void>(ref(drawer), _1), m_featureInfo);
   }

@@ -2,6 +2,7 @@
 
 #include "drape_frontend/custom_symbol.hpp"
 #include "drape_frontend/map_shape.hpp"
+#include "drape_frontend/metaline_manager.hpp"
 #include "drape_frontend/tile_key.hpp"
 #include "drape_frontend/traffic_generator.hpp"
 
@@ -35,6 +36,7 @@ public:
              TIsCountryLoadedByNameFn const & isLoadedFn,
              ref_ptr<EngineContext> engineContext,
              CustomSymbolsContextPtr customSymbolsContext,
+             MetalineCache && metalineCache,
              bool is3dBuildings, bool trafficEnabled);
   ~RuleDrawer();
 
@@ -49,6 +51,8 @@ private:
 
   ref_ptr<EngineContext> m_context;
   CustomSymbolsContextPtr m_customSymbolsContext;
+  MetalineCache m_metalineCache;
+
   m2::RectD m_globalRect;
   double m_currentScaleGtoP;
   double m_trafficScalePtoG;

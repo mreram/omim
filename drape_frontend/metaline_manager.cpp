@@ -4,6 +4,7 @@
 #include "drape_frontend/threads_commutator.hpp"
 
 #include <functional>
+#include <unordered_set>
 
 namespace df
 {
@@ -26,13 +27,45 @@ MetalineManager::~MetalineManager()
   m_threadsPool.reset();
 }
 
+MetalineCache MetalineManager::GetMetalines(std::vector<FeatureID> const & features) const
+{
+  std::lock_guard<std::mutex> lock(m_metalineCacheMutex);
+  MetalineCache result;
+  std::unordered_set<m2::Spline const *> splines;
+  for (FeatureID const & fid : features)
+  {
+    auto const metalineIt = m_metalineCache.find(fid);
+    if (metalineIt == m_metalineCache.end())
+      continue;
+
+    auto const it = splines.find(metalineIt->second.Get());
+    if (it == splines.end())
+    {
+      result.insert(*metalineIt);
+      splines.insert(metalineIt->second.Get());
+    }
+    else
+    {
+      // Mark by means of empty shared spline.
+      result.insert(std::make_pair(metalineIt->first, m2::SharedSpline()));
+    }
+  }
+  return result;
+}
+
 void MetalineManager::OnTaskFinished(threads::IRoutine * task)
 {
   ASSERT(dynamic_cast<ReadMetalineTask *>(task) != nullptr, ());
   ReadMetalineTask * t = static_cast<ReadMetalineTask *>(task);
 
+  // Update metaline cache.
+  {
+    std::lock_guard<std::mutex> lock(m_metalineCacheMutex);
+    for (auto const & metaline : t->GetCache())
+      m_metalineCache[metaline.first] = metaline.second;
+  }
+
   t->Reset();
   m_tasksPool.Return(t);
 }
-
 }  // namespace df

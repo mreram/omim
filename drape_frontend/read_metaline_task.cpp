@@ -64,7 +64,7 @@ std::vector<m2::PointD> MergePoints(std::vector<std::vector<m2::PointD>> & point
     dists[2] = (p1.back() - p2.back()).Length();
     dists[3] = (p1.front() - p2.back()).Length();
     auto minIndex = std::distance(dists.begin(), std::min_element(dists.begin(), dists.end()));
-    if (dists[minIndex] > 0.001)
+    if (dists[minIndex] > 0.01)
       minIndex = -1;
     switch (minIndex)
     {
@@ -178,16 +178,16 @@ void ReadMetalineTask::Do()
     if (mergedPoints.empty())
       continue;
 
-    //if (!metaline.m_features.empty() && metaline.m_features.front().m_index == 19392)
-    //{
-    //  DrapeApi::TLines lines;
-    //  size_t const cc = colorIndex++ % colorList.size();
-    //  lines.insert(std::make_pair(DebugPrint(metaline.m_features.front()),
-    //                              df::DrapeApiLineData(mergedPoints, colorList[cc]).Width(3.0f).ShowPoints(true)));
-    //  m_commutator->PostMessage(ThreadsCommutator::ResourceUploadThread,
-    //                            make_unique_dp<DrapeApiAddLinesMessage>(lines),
-    //                            MessagePriority::Normal);
-    //}
+//    if (!metaline.m_features.empty())
+//    {
+//      DrapeApi::TLines lines;
+//      size_t const cc = colorIndex++ % colorList.size();
+//      lines.insert(std::make_pair(DebugPrint(metaline.m_features.front()),
+//                                  df::DrapeApiLineData(mergedPoints, colorList[cc]).Width(3.0f).ShowPoints(true)));
+//      m_commutator->PostMessage(ThreadsCommutator::ResourceUploadThread,
+//                                make_unique_dp<DrapeApiAddLinesMessage>(lines),
+//                                MessagePriority::Normal);
+//    }
 
     m2::SharedSpline spline(mergedPoints);
     for (auto const & fid : metaline.m_features)

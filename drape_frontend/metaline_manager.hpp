@@ -7,6 +7,7 @@
 
 #include "indexer/feature_decl.hpp"
 
+#include <mutex>
 #include <vector>
 
 namespace df
@@ -27,12 +28,18 @@ public:
   MetalineManager(ref_ptr<ThreadsCommutator> commutator, MapDataProvider & model);
   ~MetalineManager();
 
+  MetalineCache GetMetalines(std::vector<FeatureID> const & features) const;
+
 private:
   void OnTaskFinished(threads::IRoutine * task);
 
   using TasksPool = ObjectPool<ReadMetalineTask, ReadMetalineTaskFactory>;
 
   MapDataProvider & m_model;
+
+  mutable std::mutex m_metalineCacheMutex;
+  MetalineCache m_metalineCache;
+
   TasksPool m_tasksPool;
   drape_ptr<threads::ThreadPool> m_threadsPool;
   ref_ptr<ThreadsCommutator> m_commutator;

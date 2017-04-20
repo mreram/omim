@@ -30,7 +30,7 @@ public:
   void Reset() override;
   bool IsCancelled() const override;
 
-  MetalineCache && ExtractCache() { return std::move(m_cache); }
+  MetalineCache const & GetCache() const { return m_cache; }
 
 private:
   MapDataProvider & m_model;

@@ -118,7 +118,8 @@ void BackendRenderer::AcceptMessage(ref_ptr<Message> message)
         bool have3dBuildings;
         bool forceRequest;
         m_requestedTiles->GetParams(screen, have3dBuildings, forceRequest);
-        m_readManager->UpdateCoverage(screen, have3dBuildings, forceRequest, tiles, m_texMng);
+        m_readManager->UpdateCoverage(screen, have3dBuildings, forceRequest, tiles, m_texMng,
+                                      make_ref(m_metalineManager));
         m_updateCurrentCountryFn(screen.ClipRect().Center(), (*tiles.begin()).m_zoomLevel);
       }
       break;

@@ -1,6 +1,9 @@
 #include "drape_frontend/read_manager.hpp"
 #include "drape_frontend/message_subclasses.hpp"
+#include "drape_frontend/metaline_manager.hpp"
 #include "drape_frontend/visual_params.hpp"
+
+#include "drape/texture_manager.hpp"
 
 #include "platform/platform.hpp"
 
@@ -13,10 +16,8 @@
 
 namespace df
 {
-
 namespace
 {
-
 struct LessCoverageCell
 {
   bool operator()(shared_ptr<TileInfo> const & l, TileKey const & r) const
@@ -34,8 +35,7 @@ struct LessCoverageCell
     return l->GetTileKey() < r->GetTileKey();
   }
 };
-
-} // namespace
+}  // namespace
 
 ReadManager::ReadManager(ref_ptr<ThreadsCommutator> commutator, MapDataProvider & model,
                          bool allow3dBuildings, bool trafficEnabled)
@@ -88,7 +88,8 @@ void ReadManager::OnTaskFinished(threads::IRoutine * task)
 }
 
 void ReadManager::UpdateCoverage(ScreenBase const & screen, bool have3dBuildings, bool forceUpdate,
-                                 TTilesCollection const & tiles, ref_ptr<dp::TextureManager> texMng)
+                                 TTilesCollection const & tiles, ref_ptr<dp::TextureManager> texMng,
+                                 ref_ptr<MetalineManager> metalineMng)
 {
   m_modeChanged |= (m_have3dBuildings != have3dBuildings);
   m_have3dBuildings = have3dBuildings;
@@ -103,7 +104,8 @@ void ReadManager::UpdateCoverage(ScreenBase const & screen, bool have3dBuildings
     IncreaseCounter(static_cast<int>(tiles.size()));
     m_generationCounter++;
 
-    for_each(tiles.begin(), tiles.end(), bind(&ReadManager::PushTaskBackForTileKey, this, _1, texMng));
+    for_each(tiles.begin(), tiles.end(),
+             bind(&ReadManager::PushTaskBackForTileKey, this, _1, texMng, metalineMng));
   }
   else
   {
@@ -138,7 +140,8 @@ void ReadManager::UpdateCoverage(ScreenBase const & screen, bool have3dBuildings
 
     IncreaseCounter(static_cast<int>(newTiles.size()));
     CheckFinishedTiles(readyTiles);
-    for_each(newTiles.begin(), newTiles.end(), bind(&ReadManager::PushTaskBackForTileKey, this, _1, texMng));
+    for_each(newTiles.begin(), newTiles.end(),
+             bind(&ReadManager::PushTaskBackForTileKey, this, _1, texMng, metalineMng));
   }
 
   m_currentViewport = screen;
@@ -200,10 +203,14 @@ bool ReadManager::MustDropAllTiles(ScreenBase const & screen) const
   return (oldScale != newScale) || !m_currentViewport.GlobalRect().IsIntersect(screen.GlobalRect());
 }
 
-void ReadManager::PushTaskBackForTileKey(TileKey const & tileKey, ref_ptr<dp::TextureManager> texMng)
+void ReadManager::PushTaskBackForTileKey(TileKey const & tileKey,
+                                         ref_ptr<dp::TextureManager> texMng,
+                                         ref_ptr<MetalineManager> metalineMng)
 {
-  shared_ptr<TileInfo> tileInfo(new TileInfo(make_unique_dp<EngineContext>(TileKey(tileKey, m_generationCounter),
-                                             m_commutator, texMng), m_customSymbolsContext));
+  shared_ptr<TileInfo> tileInfo(
+      new TileInfo(make_unique_dp<EngineContext>(TileKey(tileKey, m_generationCounter),
+                                                 m_commutator, texMng, metalineMng),
+                   m_customSymbolsContext));
   tileInfo->Set3dBuildings(m_have3dBuildings && m_allow3dBuildings);
   tileInfo->SetTrafficEnabled(m_trafficEnabled);
   m_tileInfos.insert(tileInfo);
