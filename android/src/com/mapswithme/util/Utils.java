@@ -8,8 +8,10 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Build;
+import android.provider.Settings;
 import android.support.annotation.DimenRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -22,6 +24,7 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.AbsoluteSizeSpan;
+import android.view.View;
 import android.view.Window;
 import android.widget.Toast;
 
@@ -29,7 +32,8 @@ import com.mapswithme.maps.BuildConfig;
 import com.mapswithme.maps.MwmApplication;
 import com.mapswithme.maps.R;
 import com.mapswithme.maps.activity.CustomNavigateUpListener;
-import com.mapswithme.maps.uber.UberLinks;
+import com.mapswithme.maps.taxi.TaxiLinks;
+import com.mapswithme.maps.taxi.TaxiManager;
 import com.mapswithme.util.concurrency.UiThread;
 import com.mapswithme.util.log.Logger;
 import com.mapswithme.util.log.LoggerFactory;
@@ -38,12 +42,15 @@ import com.mapswithme.util.statistics.AlohaHelper;
 import java.io.Closeable;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.text.NumberFormat;
 import java.util.Currency;
 import java.util.Locale;
 import java.util.Map;
 
 public class Utils
 {
+  @StringRes
+  public static final int INVALID_ID = 0;
   private static final Logger LOGGER = LoggerFactory.INSTANCE.getLogger(LoggerFactory.Type.MISC);
   private static final String TAG = "Utils";
 
@@ -204,13 +211,23 @@ public class Utils
     activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(Constants.Url.TWITTER_MAPSME_HTTP)));
   }
 
-  public static void openUrl(@NonNull Context activity, @NonNull String url)
+  public static void openUrl(@NonNull Context activity, @Nullable String url)
   {
-    final Intent intent = new Intent(Intent.ACTION_VIEW);
-    if (!url.startsWith("http://") && !url.startsWith("https://"))
-      url = "http://" + url;
-    intent.setData(Uri.parse(url));
-    activity.startActivity(intent);
+    if (TextUtils.isEmpty(url))
+      return;
+
+    try
+    {
+      final Intent intent = new Intent(Intent.ACTION_VIEW);
+      if (!url.startsWith("http://") && !url.startsWith("https://"))
+        url = "http://" + url;
+      intent.setData(Uri.parse(url));
+      activity.startActivity(intent);
+    }
+    catch (ActivityNotFoundException e)
+    {
+      CrashlyticsUtils.logException(e);
+    }
   }
 
   public static void sendSupportMail(@NonNull Activity activity, @NonNull String subject)
@@ -218,8 +235,11 @@ public class Utils
     LoggerFactory.INSTANCE.zipLogs(new OnZipCompletedCallback(activity, subject));
   }
 
-  public static void navigateToParent(@NonNull Activity activity)
+  public static void navigateToParent(@Nullable Activity activity)
   {
+    if (activity == null)
+      return;
+
     if (activity instanceof CustomNavigateUpListener)
       ((CustomNavigateUpListener) activity).customOnNavigateUp();
     else
@@ -284,12 +304,12 @@ public class Utils
     return installationId;
   }
 
-  public static boolean isUberInstalled(@NonNull Activity context)
+  private static boolean isAppInstalled(@NonNull Activity context, @NonNull String packageName)
   {
     try
     {
       PackageManager pm = context.getPackageManager();
-      pm.getPackageInfo("com.ubercab", PackageManager.GET_ACTIVITIES);
+      pm.getPackageInfo(packageName, PackageManager.GET_ACTIVITIES);
       return true;
     } catch (PackageManager.NameNotFoundException e)
     {
@@ -297,19 +317,54 @@ public class Utils
     }
   }
 
-  public static void launchUber(@NonNull Activity context, @NonNull UberLinks links)
+  public static boolean isTaxiAppInstalled(@NonNull Activity context, @TaxiManager.TaxiType int type)
+  {
+    switch (type)
+    {
+      case TaxiManager.PROVIDER_UBER:
+        return Utils.isAppInstalled(context, "com.ubercab");
+      case TaxiManager.PROVIDER_YANDEX:
+        return Utils.isAppInstalled(context, "ru.yandex.taxi");
+      default:
+        throw new AssertionError("Unsupported taxi type: " + type);
+    }
+  }
+
+  public static void launchTaxiApp(@NonNull Activity context, @NonNull TaxiLinks links,
+                                   @TaxiManager.TaxiType int type)
+  {
+    switch (type)
+    {
+      case TaxiManager.PROVIDER_UBER:
+        launchUber(context, links, isTaxiAppInstalled(context, type));
+        break;
+      case TaxiManager.PROVIDER_YANDEX:
+        launchYandexTaxi(context, links);
+        break;
+      default:
+        throw new AssertionError("Unsupported taxi type: " + type);
+    }
+  }
+
+  private static void launchUber(@NonNull Activity context, @NonNull TaxiLinks links, boolean isAppInstalled)
   {
     final Intent intent = new Intent(Intent.ACTION_VIEW);
-    if (isUberInstalled(context))
+    if (isAppInstalled)
     {
-
       intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
       intent.setData(Uri.parse(links.getDeepLink()));
     } else
     {
-      // No Uber app! Open mobile website.
+      // No Taxi app! Open mobile website.
       intent.setData(Uri.parse(links.getUniversalLink()));
     }
+    context.startActivity(intent);
+  }
+
+  private static void launchYandexTaxi(@NonNull Activity context, @NonNull TaxiLinks links)
+  {
+    Intent intent = new Intent(Intent.ACTION_VIEW);
+    intent.setData(Uri.parse(links.getDeepLink()));
     context.startActivity(intent);
   }
 
@@ -332,6 +387,18 @@ public class Utils
     {
       LOGGER.e(TAG, "Failed to call phone", e);
       AlohaHelper.logException(e);
+    }
+  }
+
+  public static void showSystemSettings(@NonNull Context context)
+  {
+    try
+    {
+      context.startActivity(new Intent(Settings.ACTION_SETTINGS));
+    }
+    catch (ActivityNotFoundException e)
+    {
+      LOGGER.e(TAG, "Failed to open system settings", e);
     }
   }
 
@@ -360,6 +427,56 @@ public class Utils
       LOGGER.e(TAG, "Failed to obtain a currency for locale: " + locale, e);
       return null;
     }
+  }
+
+  @NonNull
+  public static String formatCurrencyString(@NonNull String price, @NonNull String currencyCode)
+  {
+    String text;
+    try
+    {
+      float value = Float.valueOf(price);
+      Locale locale = Locale.getDefault();
+      Currency currency = Utils.getCurrencyForLocale(locale);
+      // If the currency cannot be obtained for the default locale we will use Locale.US.
+      if (currency == null)
+        locale = Locale.US;
+      NumberFormat formatter = NumberFormat.getCurrencyInstance(locale);
+      if (!TextUtils.isEmpty(currencyCode))
+        formatter.setCurrency(Currency.getInstance(currencyCode));
+      return formatter.format(value);
+    }
+    catch (Throwable e)
+    {
+      LOGGER.e(TAG, "Failed to format string for price = " + price
+                    + " and currencyCode = " + currencyCode, e);
+      text = (price + " " + currencyCode);
+    }
+    return text;
+  }
+
+  @StringRes
+  public static int getStringIdByKey(@NonNull Context context, @NonNull String key)
+  {
+    try
+    {
+      Resources res = context.getResources();
+      @StringRes
+      int nameId = res.getIdentifier(key, "string", context.getPackageName());
+      if (nameId == INVALID_ID || nameId == View.NO_ID)
+        throw new Resources.NotFoundException("String id '" + key + "' is not found");
+      return nameId;
+    }
+    catch (RuntimeException e)
+    {
+      LOGGER.e(TAG, "Failed to get string with id '" + key + "'", e);
+      if (BuildConfig.BUILD_TYPE.equals("debug") || BuildConfig.BUILD_TYPE.equals("beta"))
+      {
+        Toast.makeText(context, "Add string id for '" + key + "'!",
+                       Toast.LENGTH_LONG).show();
+      }
+    }
+    return INVALID_ID;
   }
 
   private  static class OnZipCompletedCallback implements LoggerFactory.OnZipCompletedListener
@@ -415,7 +532,7 @@ public class Utils
   public static void detachFragmentIfCoreNotInitialized(@NonNull Context context,
                                                         @NonNull Fragment fragment)
   {
-    if (context instanceof AppCompatActivity && !MwmApplication.get().isPlatformInitialized())
+    if (context instanceof AppCompatActivity && !MwmApplication.get().arePlatformAndCoreInitialized())
     {
       ((AppCompatActivity)context).getSupportFragmentManager()
                                   .beginTransaction()

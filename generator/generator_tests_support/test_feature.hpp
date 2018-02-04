@@ -1,10 +1,12 @@
 #pragma once
 
 #include "indexer/feature_decl.hpp"
+#include "indexer/feature_meta.hpp"
 #include "indexer/mwm_set.hpp"
 
 #include "geometry/point2d.hpp"
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,20 +32,35 @@ public:
   inline void SetPostcode(std::string const & postcode) { m_postcode = postcode; }
   inline uint64_t GetId() const { return m_id; }
   inline std::string const & GetName() const { return m_name; }
+  inline feature::Metadata & GetMetadata() { return m_metadata; }
 
   virtual void Serialize(FeatureBuilder1 & fb) const;
   virtual std::string ToString() const = 0;
 
 protected:
+  enum class Type
+  {
+    Point,
+    Area,
+    Unknown
+  };
+
   TestFeature(std::string const & name, std::string const & lang);
   TestFeature(m2::PointD const & center, std::string const & name, std::string const & lang);
+  TestFeature(vector<m2::PointD> const & boundary, std::string const & name,
+              std::string const & lang);
 
   uint64_t const m_id;
   m2::PointD const m_center;
-  bool const m_hasCenter;
+  vector<m2::PointD> const m_boundary;
+  Type const m_type;
   std::string const m_name;
   std::string const m_lang;
   std::string m_postcode;
+  feature::Metadata m_metadata;
+
+private:
+  void Init();
 };
 
 class TestCountry : public TestFeature
@@ -59,7 +76,10 @@ public:
 class TestCity : public TestFeature
 {
 public:
-  TestCity(m2::PointD const & center, std::string const & name, std::string const & lang, uint8_t rank);
+  TestCity(m2::PointD const & center, std::string const & name, std::string const & lang,
+           uint8_t rank);
+  TestCity(std::vector<m2::PointD> const & boundary, std::string const & name,
+           std::string const & lang, uint8_t rank);
 
   // TestFeature overrides:
   void Serialize(FeatureBuilder1 & fb) const override;
@@ -131,10 +151,14 @@ public:
   void Serialize(FeatureBuilder1 & fb) const override;
   std::string ToString() const override;
 
+  void AddType(std::vector<std::string> const & path) { m_types.push_back(path); }
+
 private:
   std::vector<m2::PointD> const m_boundary;
   std::string const m_houseNumber;
   std::string const m_streetName;
+
+  std::vector<std::vector<std::string>> m_types;
 };
 
 class TestPark : public TestFeature

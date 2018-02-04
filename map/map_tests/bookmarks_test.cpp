@@ -13,11 +13,16 @@
 
 #include "coding/internal/file_data.hpp"
 
-#include "std/fstream.hpp"
-#include "std/unique_ptr.hpp"
+#include <fstream>
+#include <memory>
+#include <set>
+
+using namespace std;
 
 namespace
 {
+static FrameworkParams const kFrameworkParams(false /* m_enableLocalAds */, false /* m_enableDiffs */);
+
 char const * kmlString =
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
     "<kml xmlns=\"http://earth.google.com/kml/2.2\">"
@@ -155,10 +160,7 @@ char const * kmlString =
 
 UNIT_TEST(Bookmarks_ImportKML)
 {
-  Framework framework;
-  df::VisualParams::Init(1.0, 1024);
-
-  BookmarkCategory cat("Default", framework);
+  BookmarkCategory cat("Default", UserMarkContainer::Listeners());
   TEST(cat.LoadFromKML(make_unique<MemReader>(kmlString, strlen(kmlString))), ());
 
   CheckBookmarks(cat);
@@ -172,37 +174,27 @@ UNIT_TEST(Bookmarks_ExportKML)
 {
   char const * BOOKMARKS_FILE_NAME = "UnitTestBookmarks.kml";
 
-  Framework framework;
-  df::VisualParams::Init(1.0, 1024);
-
-  BookmarkCategory cat("Default", framework);
+  BookmarkCategory cat("Default", UserMarkContainer::Listeners());
   TEST(cat.LoadFromKML(make_unique<MemReader>(kmlString, strlen(kmlString))), ());
   CheckBookmarks(cat);
 
-  {
-    BookmarkCategory::Guard guard(cat);
-    TEST_EQUAL(cat.IsVisible(), false, ());
-    // Change visibility
-    guard.m_controller.SetIsVisible(true);
-    TEST_EQUAL(cat.IsVisible(), true, ());
-  }
+  TEST_EQUAL(cat.IsVisible(), false, ());
+  // Change visibility
+  cat.SetIsVisible(true);
+  TEST_EQUAL(cat.IsVisible(), true, ());
 
-  {
-    ofstream of(BOOKMARKS_FILE_NAME);
-    cat.SaveToKML(of);
-  }
+  ofstream of(BOOKMARKS_FILE_NAME);
+  cat.SaveToKML(of);
+  of.close();
 
-  {
-    BookmarkCategory::Guard guard(cat);
-    guard.m_controller.Clear();
-    TEST_EQUAL(guard.m_controller.GetUserMarkCount(), 0, ());
-  }
+  cat.Clear();
+  TEST_EQUAL(cat.GetUserMarkCount(), 0, ());
 
   TEST(cat.LoadFromKML(make_unique<FileReader>(BOOKMARKS_FILE_NAME)), ());
   CheckBookmarks(cat);
   TEST_EQUAL(cat.IsVisible(), true, ());
 
-  unique_ptr<BookmarkCategory> cat2(BookmarkCategory::CreateFromKMLFile(BOOKMARKS_FILE_NAME, framework));
+  auto cat2 = BookmarkCategory::CreateFromKMLFile(BOOKMARKS_FILE_NAME, UserMarkContainer::Listeners());
   CheckBookmarks(*cat2);
 
   TEST(cat2->SaveToKMLFile(), ());
@@ -212,7 +204,7 @@ UNIT_TEST(Bookmarks_ExportKML)
 
   // MapName is the <name> tag in test kml data.
   string const catFileName = GetPlatform().SettingsDir() + "MapName.kml";
-  cat2.reset(BookmarkCategory::CreateFromKMLFile(catFileName, framework));
+  cat2 = BookmarkCategory::CreateFromKMLFile(catFileName, UserMarkContainer::Listeners());
   CheckBookmarks(*cat2);
   TEST(my::DeleteFileX(catFileName), ());
 }
@@ -239,7 +231,7 @@ namespace
     UserMark const * mark = GetMark(fm, pt);
     ASSERT(mark != NULL, ());
     ASSERT(mark->GetContainer() != NULL, ());
-    ASSERT(mark->GetContainer()->GetType() == UserMarkType::BOOKMARK_MARK, ());
+    ASSERT(mark->GetContainer()->GetType() == UserMark::Type::BOOKMARK, ());
     return static_cast<Bookmark const *>(mark);
   }
 
@@ -251,7 +243,7 @@ namespace
   BookmarkCategory const * GetCategory(Bookmark const * bm)
   {
     ASSERT(bm->GetContainer() != NULL, ());
-    ASSERT(bm->GetContainer()->GetType() == UserMarkType::BOOKMARK_MARK, ());
+    ASSERT(bm->GetContainer()->GetType() == UserMark::Type::BOOKMARK, ());
     return static_cast<BookmarkCategory const *>(bm->GetContainer());
   }
 
@@ -261,7 +253,7 @@ namespace
     if (mark == NULL)
       return false;
 
-    if (mark->GetContainer()->GetType() != UserMarkType::BOOKMARK_MARK)
+    if (mark->GetContainer()->GetType() != UserMark::Type::BOOKMARK)
       return false;
 
     return true;
@@ -270,7 +262,7 @@ namespace
 
 UNIT_TEST(Bookmarks_Timestamp)
 {
-  Framework fm;
+  Framework fm(kFrameworkParams);
   df::VisualParams::Init(1.0, 1024);
 
   m2::PointD const orgPoint(10, 10);
@@ -316,7 +308,7 @@ UNIT_TEST(Bookmarks_Timestamp)
 
 UNIT_TEST(Bookmarks_Getting)
 {
-  Framework fm;
+  Framework fm(kFrameworkParams);
   df::VisualParams::Init(1.0, 1024);
   fm.OnSize(800, 400);
   fm.ShowRect(m2::RectD(0, 0, 80, 40));
@@ -375,8 +367,8 @@ UNIT_TEST(Bookmarks_Getting)
 
   TEST_EQUAL(cat->GetUserMarkCount(), 2, ());
 
-  BookmarkCategory::Guard guard(*fm.GetBmCategory(2));
-  guard.m_controller.DeleteUserMark(0);
+  BookmarkCategory * cat3 = fm.GetBmCategory(2);
+  cat3->DeleteUserMark(0);
   TEST_EQUAL(cat->GetUserMarkCount(), 1, ());
 
   DeleteCategoryFiles(arrCat);
@@ -408,7 +400,7 @@ namespace
 UNIT_TEST(Bookmarks_AddressInfo)
 {
   // Maps added in constructor (we need minsk-pass.mwm only)
-  Framework fm;
+  Framework fm(kFrameworkParams);
   fm.DeregisterAllMaps();
   fm.RegisterMap(platform::LocalCountryFile::MakeForTesting("minsk-pass"));
   fm.OnSize(800, 600);
@@ -471,7 +463,7 @@ UNIT_TEST(Bookmarks_UniqueFileName)
 
 UNIT_TEST(Bookmarks_AddingMoving)
 {
-  Framework fm;
+  Framework fm(kFrameworkParams);
   fm.OnSize(800, 400);
   fm.ShowRect(m2::RectD(0, 0, 80, 40));
 
@@ -547,8 +539,7 @@ char const * kmlString2 =
 
 UNIT_TEST(Bookmarks_InnerFolder)
 {
-  Framework framework;
-  BookmarkCategory cat("Default", framework);
+  BookmarkCategory cat("Default", UserMarkContainer::Listeners());
   TEST(cat.LoadFromKML(make_unique<MemReader>(kmlString2, strlen(kmlString2))), ());
 
   TEST_EQUAL(cat.GetUserMarkCount(), 1, ());
@@ -556,12 +547,8 @@ UNIT_TEST(Bookmarks_InnerFolder)
 
 UNIT_TEST(BookmarkCategory_EmptyName)
 {
-  Framework framework;
-  unique_ptr<BookmarkCategory> pCat(new BookmarkCategory("", framework));
-  {
-    BookmarkCategory::Guard guard(*pCat);
-    static_cast<Bookmark *>(guard.m_controller.CreateUserMark(m2::PointD(0, 0)))->SetData(BookmarkData("", "placemark-red"));
-  }
+  unique_ptr<BookmarkCategory> pCat(new BookmarkCategory("", UserMarkContainer::Listeners()));
+  static_cast<Bookmark *>(pCat->CreateUserMark(m2::PointD(0, 0)))->SetData(BookmarkData("", "placemark-red"));
   TEST(pCat->SaveToKMLFile(), ());
 
   pCat->SetName("xxx");
@@ -609,14 +596,14 @@ char const * kmlString3 =
 
 UNIT_TEST(Bookmarks_SpecialXMLNames)
 {
-  Framework framework;
-  BookmarkCategory cat1("", framework);
+  BookmarkCategory cat1("", UserMarkContainer::Listeners());
   TEST(cat1.LoadFromKML(make_unique<MemReader>(kmlString3, strlen(kmlString3))), ());
 
   TEST_EQUAL(cat1.GetUserMarkCount(), 1, ());
   TEST(cat1.SaveToKMLFile(), ());
 
-  unique_ptr<BookmarkCategory> const cat2(BookmarkCategory::CreateFromKMLFile(cat1.GetFileName(), framework));
+  unique_ptr<BookmarkCategory> const cat2(BookmarkCategory::CreateFromKMLFile(cat1.GetFileName(),
+                                                                              UserMarkContainer::Listeners()));
   TEST(cat2.get(), ());
   TEST_EQUAL(cat2->GetUserMarkCount(), 1, ());
 
@@ -633,9 +620,8 @@ UNIT_TEST(Bookmarks_SpecialXMLNames)
 
 UNIT_TEST(TrackParsingTest_1)
 {
-  Framework framework;
   string const kmlFile = GetPlatform().TestsDataPathForFile("kml-with-track-kml.test");
-  BookmarkCategory * cat = BookmarkCategory::CreateFromKMLFile(kmlFile, framework);
+  auto cat = BookmarkCategory::CreateFromKMLFile(kmlFile, UserMarkContainer::Listeners());
   TEST(cat, ("Category can't be created"));
 
   TEST_EQUAL(cat->GetTracksCount(), 4, ());
@@ -659,9 +645,8 @@ UNIT_TEST(TrackParsingTest_1)
 
 UNIT_TEST(TrackParsingTest_2)
 {
-  Framework framework;
   string const kmlFile = GetPlatform().TestsDataPathForFile("kml-with-track-from-google-earth.test");
-  BookmarkCategory * cat = BookmarkCategory::CreateFromKMLFile(kmlFile, framework);
+  auto cat = BookmarkCategory::CreateFromKMLFile(kmlFile, UserMarkContainer::Listeners());
   TEST(cat, ("Category can't be created"));
 
   TEST_EQUAL(cat->GetTracksCount(), 1, ());
@@ -669,4 +654,84 @@ UNIT_TEST(TrackParsingTest_2)
   TEST_EQUAL(track->GetName(), "XY", ());
   TEST_GREATER(track->GetLayerCount(), 0, ());
   TEST_EQUAL(track->GetColor(0), dp::Color(57, 255, 32, 255), ());
+}
+
+UNIT_TEST(Bookmarks_Listeners)
+{
+  set<df::MarkID> createdMarksResult;
+  set<df::MarkID> updatedMarksResult;
+  set<df::MarkID> deletedMarksResult;
+  set<df::MarkID> createdMarks;
+  set<df::MarkID> updatedMarks;
+  set<df::MarkID> deletedMarks;
+
+  auto const checkNotifications = [&](BookmarkCategory & cat)
+  {
+    cat.NotifyChanges();
+    TEST_EQUAL(createdMarks, createdMarksResult, ());
+    TEST_EQUAL(updatedMarks, updatedMarksResult, ());
+    TEST_EQUAL(deletedMarks, deletedMarksResult, ());
+  };
+
+  auto const refresh = [&](BookmarkCategory & cat)
+  {
+    df::MarkIDCollection createdIds;
+    df::MarkIDCollection deletedIds;
+    cat.AcceptChanges(createdIds, deletedIds);
+
+    createdMarksResult.clear();
+    updatedMarksResult.clear();
+    deletedMarksResult.clear();
+    createdMarks.clear();
+    updatedMarks.clear();
+    deletedMarks.clear();
+  };
+
+  auto const onCreate = [&createdMarksResult](UserMarkContainer const & container, df::IDCollection const & markIds)
+  {
+    createdMarksResult.insert(markIds.begin(), markIds.end());
+  };
+  auto const onUpdate = [&updatedMarksResult](UserMarkContainer const & container, df::IDCollection const & markIds)
+  {
+    updatedMarksResult.insert(markIds.begin(), markIds.end());
+  };
+  auto const onDelete = [&deletedMarksResult](UserMarkContainer const & container, df::IDCollection const & markIds)
+  {
+    deletedMarksResult.insert(markIds.begin(), markIds.end());
+  };
+
+  BookmarkCategory cat("Default", UserMarkContainer::Listeners(onCreate, onUpdate, onDelete));
+
+  auto bookmark0 = static_cast<Bookmark *>(cat.CreateUserMark(m2::PointD(0.0, 0.0)));
+  bookmark0->SetData(BookmarkData("name 0", "type 0"));
+  createdMarks.insert(bookmark0->GetId());
+
+  auto bookmark1 = static_cast<Bookmark *>(cat.CreateUserMark(m2::PointD(0.0, 0.0)));
+  bookmark1->SetData(BookmarkData("name 1", "type 1"));
+  createdMarks.insert(bookmark1->GetId());
+
+  createdMarks.erase(cat.GetUserMark(0)->GetId());
+  cat.DeleteUserMark(0);
+
+  checkNotifications(cat);
+  refresh(cat);
+
+  bookmark0 = static_cast<Bookmark *>(cat.GetUserMarkForEdit(0));
+  bookmark0->SetName("name 3");
+  updatedMarks.insert(cat.GetUserMark(0)->GetId());
+
+  checkNotifications(cat);
+  refresh(cat);
+
+  deletedMarks.insert(cat.GetUserMark(0)->GetId());
+  bookmark0 = static_cast<Bookmark *>(cat.GetUserMarkForEdit(0));
+  bookmark0->SetName("name 4");
+  cat.DeleteUserMark(0);
+
+  bookmark1 = static_cast<Bookmark *>(cat.CreateUserMark(m2::PointD(0.0, 0.0)));
+  createdMarks.insert(bookmark1->GetId());
+  bookmark1->SetData(BookmarkData("name 5", "type 5"));
+
+  checkNotifications(cat);
+  refresh(cat);
 }

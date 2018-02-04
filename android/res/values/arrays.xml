@@ -1,46 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-  <!-- First start screen -->
-  <integer-array name="first_start_images">
-    <item>@drawable/img_first_start_offline</item>
-    <item>@drawable/img_first_start_navigation</item>
-  </integer-array>
-
-  <string-array name="first_start_titles">
-    <item>@string/onboarding_offline_navigation_title</item>
-    <item>@string/onboarding_offline_maps_title</item>
-  </string-array>
-
-  <string-array name="first_start_subtitles">
-    <item>@string/onboarding_offline_navigation_message</item>
-    <item>@string/onboarding_offline_maps_message</item>
-  </string-array>
-
-  <string-array name="first_start_switch_titles">
-    <item/>
-    <item/>
-  </string-array>
-
-  <string-array name="first_start_switch_subtitles">
-    <item/>
-    <item/>
-  </string-array>
-
   <!-- What's new -->
   <integer-array name="news_images">
-    <item>@drawable/img_whatsnew_driving_style</item>
-    <item>@drawable/img_whatsnew_transliteration</item>
+    <item>@drawable/img_whats_new_transport</item>
+    <item>@drawable/img_whats_new_discover</item>
   </integer-array>
 
   <string-array name="news_titles">
-    <item>@string/whatsnew_driving_style_title</item>
-    <item>@string/whatsnew_transliteration_title</item>
+    <item>@string/whats_new_transit_title</item>
+    <item>@string/whats_new_discovery_title</item>
   </string-array>
 
   <string-array name="news_messages_1">
-    <item>@string/whatsnew_driving_style_message</item>
-    <item>@string/whatsnew_transliteration_message</item>
+    <item>@string/whats_new_transit_message</item>
+    <item>@string/whats_new_discovery_message</item>
   </string-array>
 
   <string-array name="news_messages_2">

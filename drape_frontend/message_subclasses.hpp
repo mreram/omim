@@ -1,46 +1,44 @@
 #pragma once
 
-#include "drape_frontend/gui/layer_render.hpp"
-#include "drape_frontend/gui/skin.hpp"
-
+#include "drape_frontend/circles_pack_shape.hpp"
 #include "drape_frontend/color_constants.hpp"
-#include "drape_frontend/custom_symbol.hpp"
 #include "drape_frontend/drape_api.hpp"
 #include "drape_frontend/drape_api_builder.hpp"
 #include "drape_frontend/gps_track_point.hpp"
-#include "drape_frontend/gps_track_shape.hpp"
+#include "drape_frontend/gui/layer_render.hpp"
+#include "drape_frontend/gui/skin.hpp"
 #include "drape_frontend/message.hpp"
 #include "drape_frontend/my_position.hpp"
 #include "drape_frontend/overlay_batcher.hpp"
 #include "drape_frontend/postprocess_renderer.hpp"
+#include "drape_frontend/render_state.hpp"
 #include "drape_frontend/route_builder.hpp"
 #include "drape_frontend/selection_shape.hpp"
 #include "drape_frontend/tile_utils.hpp"
 #include "drape_frontend/traffic_generator.hpp"
-#include "drape_frontend/user_marks_provider.hpp"
+#include "drape_frontend/user_event_stream.hpp"
 #include "drape_frontend/user_mark_shapes.hpp"
+#include "drape_frontend/user_marks_provider.hpp"
+
+#include "drape/pointers.hpp"
+#include "drape/render_bucket.hpp"
+#include "drape/viewport.hpp"
 
 #include "geometry/polyline2d.hpp"
 #include "geometry/rect2d.hpp"
 #include "geometry/screenbase.hpp"
 #include "geometry/triangle2d.hpp"
 
-#include "drape/glstate.hpp"
-#include "drape/pointers.hpp"
-#include "drape/render_bucket.hpp"
-#include "drape/viewport.hpp"
-
 #include "platform/location.hpp"
 
 #include "std/condition_variable.hpp"
-#include "std/shared_ptr.hpp"
-#include "std/set.hpp"
 #include "std/function.hpp"
+#include "std/set.hpp"
+#include "std/shared_ptr.hpp"
 #include "std/utility.hpp"
 
 namespace df
 {
-
 class BaseBlockingMessage : public Message
 {
 public:
@@ -105,23 +103,27 @@ public:
 class FinishTileReadMessage : public Message
 {
 public:
-  template<typename T> FinishTileReadMessage(T && tiles)
+  template<typename T> FinishTileReadMessage(T && tiles, bool forceUpdateUserMarks)
     : m_tiles(forward<T>(tiles))
+    , m_forceUpdateUserMarks(forceUpdateUserMarks)
   {}
 
   Type GetType() const override { return Message::FinishTileRead; }
 
   TTilesCollection const & GetTiles() const { return m_tiles; }
   TTilesCollection && MoveTiles() { return move(m_tiles); }
+  bool NeedForceUpdateUserMarks() const { return m_forceUpdateUserMarks; }
 
 private:
   TTilesCollection m_tiles;
+  bool m_forceUpdateUserMarks;
 };
 
 class FlushRenderBucketMessage : public BaseTileMessage
 {
 public:
-  FlushRenderBucketMessage(TileKey const & key, dp::GLState const & state, drape_ptr<dp::RenderBucket> && buffer)
+  FlushRenderBucketMessage(TileKey const & key, dp::GLState const & state,
+                           drape_ptr<dp::RenderBucket> && buffer)
     : BaseTileMessage(key)
     , m_state(state)
     , m_buffer(move(buffer))
@@ -138,19 +140,23 @@ private:
   drape_ptr<dp::RenderBucket> m_buffer;
 };
 
-class FlushOverlaysMessage : public Message
+template <typename RenderDataType, Message::Type MessageType>
+class FlushRenderDataMessage : public Message
 {
 public:
-  FlushOverlaysMessage(TOverlaysRenderData && data) : m_data(move(data)) {}
+  explicit FlushRenderDataMessage(RenderDataType && data) : m_data(std::move(data)) {}
 
-  Type GetType() const override { return Message::FlushOverlays; }
+  Type GetType() const override { return MessageType; }
   bool IsGLContextDependent() const override { return true; }
 
-  TOverlaysRenderData && AcceptRenderData() { return move(m_data); }
+  RenderDataType && AcceptRenderData() { return std::move(m_data); }
 
 private:
-  TOverlaysRenderData m_data;
+  RenderDataType m_data;
 };
+
+using FlushOverlaysMessage = FlushRenderDataMessage<TOverlaysRenderData,
+                                                    Message::FlushOverlays>;
 
 class InvalidateRectMessage : public Message
 {
@@ -180,120 +186,111 @@ public:
   InvalidateReadManagerRectMessage(Blocker & blocker, TTilesCollection const & tiles)
     : BaseBlockingMessage(blocker)
     , m_tiles(tiles)
-    , m_needInvalidateAll(false)
+    , m_needRestartReading(false)
   {}
 
   InvalidateReadManagerRectMessage(Blocker & blocker)
     : BaseBlockingMessage(blocker)
-    , m_needInvalidateAll(true)
+    , m_needRestartReading(true)
   {}
 
   Type GetType() const override { return Message::InvalidateReadManagerRect; }
 
   TTilesCollection const & GetTilesForInvalidate() const { return m_tiles; }
-  bool NeedInvalidateAll() const { return m_needInvalidateAll; }
+  bool NeedRestartReading() const { return m_needRestartReading; }
 
 private:
   TTilesCollection m_tiles;
-  bool m_needInvalidateAll;
+  bool m_needRestartReading;
 };
 
-class BaseUserMarkLayerMessage : public Message
+class ClearUserMarkGroupMessage : public Message
 {
 public:
-  BaseUserMarkLayerMessage(size_t layerId)
-    : m_layerId(layerId)
+  ClearUserMarkGroupMessage(MarkGroupID groupId)
+    : m_groupId(groupId)
   {}
 
-  size_t GetLayerId() const { return m_layerId; }
+  Type GetType() const override { return Message::ClearUserMarkGroup; }
+
+  MarkGroupID GetGroupId() const { return m_groupId; }
 
 private:
-  size_t m_layerId;
+  MarkGroupID m_groupId;
 };
 
-class ClearUserMarkLayerMessage : public BaseUserMarkLayerMessage
+class ChangeUserMarkGroupVisibilityMessage : public Message
 {
 public:
-  ClearUserMarkLayerMessage(size_t layerId)
-    : BaseUserMarkLayerMessage(layerId) {}
-
-  Type GetType() const override { return Message::ClearUserMarkLayer; }
-};
-
-class ChangeUserMarkLayerVisibilityMessage : public BaseUserMarkLayerMessage
-{
-public:
-  ChangeUserMarkLayerVisibilityMessage(size_t layerId, bool isVisible)
-    : BaseUserMarkLayerMessage(layerId)
+  ChangeUserMarkGroupVisibilityMessage(MarkGroupID groupId, bool isVisible)
+    : m_groupId(groupId)
     , m_isVisible(isVisible) {}
 
-  Type GetType() const override { return Message::ChangeUserMarkLayerVisibility; }
+  Type GetType() const override { return Message::ChangeUserMarkGroupVisibility; }
 
+  MarkGroupID GetGroupId() const { return m_groupId; }
   bool IsVisible() const { return m_isVisible; }
 
 private:
+  MarkGroupID m_groupId;
   bool m_isVisible;
 };
 
-class UpdateUserMarkLayerMessage : public BaseUserMarkLayerMessage
+class UpdateUserMarksMessage : public Message
 {
 public:
-  UpdateUserMarkLayerMessage(size_t layerId, UserMarksProvider * provider)
-    : BaseUserMarkLayerMessage(layerId)
-    , m_provider(provider)
-  {
-    m_provider->IncrementCounter();
-  }
-
-  ~UpdateUserMarkLayerMessage() override
-  {
-    ASSERT(m_inProcess == false, ());
-    m_provider->DecrementCounter();
-    if (m_provider->IsPendingOnDelete() && m_provider->CanBeDeleted())
-      delete m_provider;
-  }
-
-  Type GetType() const override { return Message::UpdateUserMarkLayer; }
-
-  UserMarksProvider const * StartProcess()
-  {
-    m_provider->BeginRead();
-#ifdef DEBUG
-    m_inProcess = true;
-#endif
-    return m_provider;
-  }
-
-  void EndProcess()
-  {
-#ifdef DEBUG
-    m_inProcess = false;
-#endif
-    m_provider->EndRead();
-  }
-
-private:
-  UserMarksProvider * m_provider;
-#ifdef DEBUG
-  bool m_inProcess;
-#endif
-};
-
-class FlushUserMarksMessage : public BaseUserMarkLayerMessage
-{
-public:
-  FlushUserMarksMessage(size_t layerId, TUserMarkShapes && shapes)
-    : BaseUserMarkLayerMessage(layerId)
-    , m_shapes(move(shapes))
+  UpdateUserMarksMessage(drape_ptr<MarkIDCollection> && createdIds,
+                         drape_ptr<MarkIDCollection> && removedIds,
+                         drape_ptr<UserMarksRenderCollection> && marksRenderParams,
+                         drape_ptr<UserLinesRenderCollection> && linesRenderParams)
+    : m_createdIds(std::move(createdIds))
+    , m_removedIds(std::move(removedIds))
+    , m_marksRenderParams(std::move(marksRenderParams))
+    , m_linesRenderParams(std::move(linesRenderParams))
   {}
 
-  Type GetType() const override { return Message::FlushUserMarks; }
-  bool IsGLContextDependent() const override { return true; }
+  Type GetType() const override { return Message::UpdateUserMarks; }
 
-  TUserMarkShapes & GetShapes() { return m_shapes; }
+  drape_ptr<UserMarksRenderCollection> && AcceptMarkRenderParams() { return std::move(m_marksRenderParams); }
+  drape_ptr<UserLinesRenderCollection> && AcceptLineRenderParams() { return std::move(m_linesRenderParams); }
+  drape_ptr<MarkIDCollection> && AcceptRemovedIds() { return std::move(m_removedIds); }
+  drape_ptr<MarkIDCollection> && AcceptCreatedIds() { return std::move(m_createdIds); }
 
 private:
-  TUserMarkShapes m_shapes;
+  drape_ptr<MarkIDCollection> m_createdIds;
+  drape_ptr<MarkIDCollection> m_removedIds;
+  drape_ptr<UserMarksRenderCollection> m_marksRenderParams;
+  drape_ptr<UserLinesRenderCollection> m_linesRenderParams;
+};
+
+class UpdateUserMarkGroupMessage : public Message
+{
+public:
+  UpdateUserMarkGroupMessage(MarkGroupID groupId,
+                             drape_ptr<MarkIDCollection> && ids)
+    : m_groupId(groupId)
+    , m_ids(std::move(ids))
+  {}
+
+  Type GetType() const override { return Message::UpdateUserMarkGroup; }
+
+  MarkGroupID GetGroupId() const { return m_groupId; }
+  drape_ptr<MarkIDCollection> && AcceptIds() { return std::move(m_ids); }
+
+private:
+  MarkGroupID m_groupId;
+  drape_ptr<MarkIDCollection> m_ids;
+};
+
+using FlushUserMarksMessage = FlushRenderDataMessage<TUserMarksRenderData,
+                                                     Message::FlushUserMarks>;
+
+class InvalidateUserMarksMessage : public Message
+{
+public:
+  InvalidateUserMarksMessage() = default;
+
+  Type GetType() const override { return Message::InvalidateUserMarks; }
 };
 
 class GuiLayerRecachedMessage : public Message
@@ -459,7 +456,7 @@ public:
   {}
 
   EChangeType GetChangeType() const { return m_changeType; }
-  Type GetType() const override { return Message::ChangeMyPostitionMode; }
+  Type GetType() const override { return Message::ChangeMyPositionMode; }
 
 private:
   EChangeType const m_changeType;
@@ -502,28 +499,6 @@ private:
   location::RouteMatchingInfo const m_routeInfo;
 };
 
-class FindVisiblePOIMessage : public BaseBlockingMessage
-{
-public:
-  FindVisiblePOIMessage(Blocker & blocker, m2::PointD const & glbPt, FeatureID & featureID)
-    : BaseBlockingMessage(blocker)
-    , m_pt(glbPt)
-    , m_featureID(featureID)
-  {}
-
-  Type GetType() const override { return FindVisiblePOI; }
-
-  m2::PointD const & GetPoint() const { return m_pt; }
-  void SetFeatureID(FeatureID const & id)
-  {
-    m_featureID = id;
-  }
-
-private:
-  m2::PointD m_pt;
-  FeatureID & m_featureID;
-};
-
 class SelectObjectMessage : public Message
 {
 public:
@@ -561,198 +536,138 @@ private:
   bool m_isDismiss;
 };
 
-class GetSelectedObjectMessage : public BaseBlockingMessage
+class AddSubrouteMessage : public Message
 {
 public:
-  GetSelectedObjectMessage(Blocker & blocker, SelectionShape::ESelectedObject & object)
-    : BaseBlockingMessage(blocker)
-    , m_object(object)
+  AddSubrouteMessage(dp::DrapeID subrouteId, SubrouteConstPtr subroute)
+    : AddSubrouteMessage(subrouteId, subroute, -1 /* invalid recache id */)
   {}
 
-  Type GetType() const override { return GetSelectedObject; }
-
-  void SetSelectedObject(SelectionShape::ESelectedObject const & object)
-  {
-    m_object = object;
-  }
-
-private:
-  SelectionShape::ESelectedObject & m_object;
-};
-
-class GetMyPositionMessage : public BaseBlockingMessage
-{
-public:
-  GetMyPositionMessage(Blocker & blocker, bool & hasPosition, m2::PointD & myPosition)
-    : BaseBlockingMessage(blocker)
-    , m_myPosition(myPosition)
-    , m_hasPosition(hasPosition)
-  {}
-
-  Type GetType() const override { return GetMyPosition; }
-
-  void SetMyPosition(bool hasPosition, m2::PointD const & myPosition)
-  {
-    m_hasPosition = hasPosition;
-    m_myPosition = myPosition;
-  }
-
-private:
-  m2::PointD & m_myPosition;
-  bool & m_hasPosition;
-};
-
-class AddRouteMessage : public Message
-{
-public:
-  AddRouteMessage(m2::PolylineD const & routePolyline, vector<double> const & turns,
-                  df::ColorConstant color, vector<traffic::SpeedGroup> const & traffic,
-                  df::RoutePattern const & pattern)
-    : AddRouteMessage(routePolyline, turns, color, traffic, pattern, -1 /* invalid recache id */)
-  {}
-
-  AddRouteMessage(m2::PolylineD const & routePolyline, vector<double> const & turns,
-                  df::ColorConstant color, vector<traffic::SpeedGroup> const & traffic,
-                  df::RoutePattern const & pattern, int recacheId)
-    : m_routePolyline(routePolyline)
-    , m_color(color)
-    , m_turns(turns)
-    , m_pattern(pattern)
-    , m_traffic(traffic)
+  AddSubrouteMessage(dp::DrapeID subrouteId, SubrouteConstPtr subroute, int recacheId)
+    : m_subrouteId(subrouteId)
+    , m_subroute(subroute)
     , m_recacheId(recacheId)
   {}
 
-  Type GetType() const override { return Message::AddRoute; }
+  Type GetType() const override { return Message::AddSubroute; }
 
-  m2::PolylineD const & GetRoutePolyline() { return m_routePolyline; }
-  df::ColorConstant GetColor() const { return m_color; }
-  vector<double> const & GetTurns() const { return m_turns; }
-  df::RoutePattern const & GetPattern() const { return m_pattern; }
-  vector<traffic::SpeedGroup> const & GetTraffic() const { return m_traffic; }
+  dp::DrapeID GetSubrouteId() const { return m_subrouteId; };
+  SubrouteConstPtr GetSubroute() const { return m_subroute; }
   int GetRecacheId() const { return m_recacheId; }
 
 private:
-  m2::PolylineD m_routePolyline;
-  df::ColorConstant m_color;
-  vector<double> m_turns;
-  df::RoutePattern m_pattern;
-  vector<traffic::SpeedGroup> m_traffic;
+  dp::DrapeID m_subrouteId;
+  SubrouteConstPtr m_subroute;
   int const m_recacheId;
 };
 
-class CacheRouteSignMessage : public Message
+class CacheSubrouteArrowsMessage : public Message
 {
 public:
-  CacheRouteSignMessage(m2::PointD const & pos, bool isStart, bool isValid)
-    : CacheRouteSignMessage(pos, isStart, isValid, -1 /* invalid recache id */)
-  {}
-
-  CacheRouteSignMessage(m2::PointD const & pos, bool isStart, bool isValid, int recacheId)
-    : m_position(pos)
-    , m_isStart(isStart)
-    , m_isValid(isValid)
-    , m_recacheId(recacheId)
-  {}
-
-  Type GetType() const override { return Message::CacheRouteSign; }
-
-  m2::PointD const & GetPosition() const { return m_position; }
-  bool IsStart() const { return m_isStart; }
-  bool IsValid() const { return m_isValid; }
-  int GetRecacheId() const { return m_recacheId; }
-
-private:
-  m2::PointD const m_position;
-  bool const m_isStart;
-  bool const m_isValid;
-  int const m_recacheId;
-};
-
-class CacheRouteArrowsMessage : public Message
-{
-public:
-  CacheRouteArrowsMessage(int routeIndex, vector<ArrowBorders> const & borders)
-    : CacheRouteArrowsMessage(routeIndex, borders, -1 /* invalid recache id */)
-  {}
-
-  CacheRouteArrowsMessage(int routeIndex, vector<ArrowBorders> const & borders, int recacheId)
-    : m_routeIndex(routeIndex)
+  CacheSubrouteArrowsMessage(dp::DrapeID subrouteId,
+                             std::vector<ArrowBorders> const & borders,
+                             int recacheId)
+    : m_subrouteId(subrouteId)
     , m_borders(borders)
     , m_recacheId(recacheId)
   {}
 
-  Type GetType() const override { return Message::CacheRouteArrows; }
-
-  int GetRouteIndex() const { return m_routeIndex; }
-  vector<ArrowBorders> const & GetBorders() const { return m_borders; }
+  Type GetType() const override { return Message::CacheSubrouteArrows; }
+  dp::DrapeID GetSubrouteId() const { return m_subrouteId; }
+  std::vector<ArrowBorders> const & GetBorders() const { return m_borders; }
   int GetRecacheId() const { return m_recacheId; }
 
 private:
-  int m_routeIndex;
-  vector<ArrowBorders> m_borders;
+  dp::DrapeID m_subrouteId;
+  std::vector<ArrowBorders> m_borders;
   int const m_recacheId;
 };
 
-class RemoveRouteMessage : public Message
+class RemoveSubrouteMessage : public Message
 {
 public:
-  RemoveRouteMessage(bool deactivateFollowing)
-    : m_deactivateFollowing(deactivateFollowing)
+  RemoveSubrouteMessage(dp::DrapeID segmentId, bool deactivateFollowing)
+    : m_subrouteId(segmentId)
+    , m_deactivateFollowing(deactivateFollowing)
   {}
 
-  Type GetType() const override { return Message::RemoveRoute; }
+  Type GetType() const override { return Message::RemoveSubroute; }
 
+  dp::DrapeID GetSegmentId() const { return m_subrouteId; }
   bool NeedDeactivateFollowing() const { return m_deactivateFollowing; }
 
 private:
+  dp::DrapeID m_subrouteId;
   bool m_deactivateFollowing;
 };
 
-class FlushRouteMessage : public Message
+using FlushSubrouteMessage = FlushRenderDataMessage<drape_ptr<SubrouteData>,
+                                                    Message::FlushSubroute>;
+using FlushSubrouteArrowsMessage = FlushRenderDataMessage<drape_ptr<SubrouteArrowsData>,
+                                                          Message::FlushSubrouteArrows>;
+using FlushSubrouteMarkersMessage = FlushRenderDataMessage<drape_ptr<SubrouteMarkersData>,
+                                                           Message::FlushSubrouteMarkers>;
+
+class AddRoutePreviewSegmentMessage : public Message
 {
 public:
-  FlushRouteMessage(drape_ptr<RouteData> && routeData)
-    : m_routeData(move(routeData))
+  AddRoutePreviewSegmentMessage(dp::DrapeID segmentId, m2::PointD const & startPt,
+                                m2::PointD const & finishPt)
+    : m_segmentId(segmentId)
+    , m_startPoint(startPt)
+    , m_finishPoint(finishPt)
   {}
 
-  Type GetType() const override { return Message::FlushRoute; }
-  bool IsGLContextDependent() const override { return true; }
+  Type GetType() const override { return Message::AddRoutePreviewSegment; }
 
-  drape_ptr<RouteData> && AcceptRouteData() { return move(m_routeData); }
+  dp::DrapeID GetSegmentId() const { return m_segmentId; };
+  m2::PointD const & GetStartPoint() const { return m_startPoint; }
+  m2::PointD const & GetFinishPoint() const { return m_finishPoint; }
 
 private:
-  drape_ptr<RouteData> m_routeData;
+  dp::DrapeID m_segmentId;
+  m2::PointD m_startPoint;
+  m2::PointD m_finishPoint;
 };
 
-class FlushRouteArrowsMessage : public Message
+class RemoveRoutePreviewSegmentMessage : public Message
 {
 public:
-  FlushRouteArrowsMessage(drape_ptr<RouteArrowsData> && routeArrowsData)
-    : m_routeArrowsData(move(routeArrowsData))
+  RemoveRoutePreviewSegmentMessage()
+    : m_needRemoveAll(true)
   {}
 
-  Type GetType() const override { return Message::FlushRouteArrows; }
+  explicit RemoveRoutePreviewSegmentMessage(dp::DrapeID segmentId)
+    : m_segmentId(segmentId)
+    , m_needRemoveAll(false)
+  {}
 
-  drape_ptr<RouteArrowsData> && AcceptRouteArrowsData() { return move(m_routeArrowsData); }
+  Type GetType() const override { return Message::RemoveRoutePreviewSegment; }
+
+  dp::DrapeID GetSegmentId() const { return m_segmentId; }
+  bool NeedRemoveAll() const { return m_needRemoveAll; }
 
 private:
-  drape_ptr<RouteArrowsData> m_routeArrowsData;
+  dp::DrapeID m_segmentId;
+  bool m_needRemoveAll;
 };
 
-class FlushRouteSignMessage : public Message
+class SetSubrouteVisibilityMessage : public Message
 {
 public:
-  FlushRouteSignMessage(drape_ptr<RouteSignData> && routeSignData)
-    : m_routeSignData(move(routeSignData))
+  SetSubrouteVisibilityMessage(dp::DrapeID subrouteId, bool isVisible)
+    : m_subrouteId(subrouteId)
+    , m_isVisible(isVisible)
   {}
 
-  Type GetType() const override { return Message::FlushRouteSign; }
-  bool IsGLContextDependent() const override { return true; }
+  Type GetType() const override { return Message::SetSubrouteVisibility; }
 
-  drape_ptr<RouteSignData> && AcceptRouteSignData() { return move(m_routeSignData); }
+  dp::DrapeID GetSubrouteId() const { return m_subrouteId; }
+  bool IsVisible() const { return m_isVisible; }
 
 private:
-  drape_ptr<RouteSignData> m_routeSignData;
+  dp::DrapeID m_subrouteId;
+  bool m_isVisible;
 };
 
 class UpdateMapStyleMessage : public BaseBlockingMessage
@@ -892,51 +807,64 @@ public:
   Type GetType() const override { return Message::EnablePerspective; }
 };
 
-class CacheGpsTrackPointsMessage : public Message
+class CacheCirclesPackMessage : public Message
 {
 public:
-  CacheGpsTrackPointsMessage(uint32_t pointsCount) : m_pointsCount(pointsCount) {}
+  enum Destination
+  {
+    GpsTrack,
+    RoutePreview
+  };
 
-  Type GetType() const override { return Message::CacheGpsTrackPoints; }
+  CacheCirclesPackMessage(uint32_t pointsCount, Destination dest)
+    : m_pointsCount(pointsCount)
+    , m_destination(dest)
+  {}
+
+  Type GetType() const override { return Message::CacheCirclesPack; }
 
   uint32_t GetPointsCount() const { return m_pointsCount; }
+  Destination GetDestination() const { return m_destination; }
 
 private:
   uint32_t m_pointsCount;
+  Destination m_destination;
 };
 
-class FlushGpsTrackPointsMessage : public Message
+using BaseFlushCirclesPackMessage = FlushRenderDataMessage<drape_ptr<CirclesPackRenderData>,
+                                                           Message::FlushCirclesPack>;
+class FlushCirclesPackMessage : public BaseFlushCirclesPackMessage
 {
 public:
-  FlushGpsTrackPointsMessage(drape_ptr<GpsTrackRenderData> && renderData)
-    : m_renderData(move(renderData))
+  FlushCirclesPackMessage(drape_ptr<CirclesPackRenderData> && renderData,
+                          CacheCirclesPackMessage::Destination dest)
+    : BaseFlushCirclesPackMessage(std::move(renderData))
+    , m_destination(dest)
   {}
 
-  Type GetType() const override { return Message::FlushGpsTrackPoints; }
-  bool IsGLContextDependent() const override { return true; }
-
-  drape_ptr<GpsTrackRenderData> && AcceptRenderData() { return move(m_renderData); }
+  CacheCirclesPackMessage::Destination GetDestination() const { return m_destination; }
 
 private:
-  drape_ptr<GpsTrackRenderData> m_renderData;
+  CacheCirclesPackMessage::Destination m_destination;
 };
 
 class UpdateGpsTrackPointsMessage : public Message
 {
 public:
-  UpdateGpsTrackPointsMessage(vector<GpsTrackPoint> && toAdd, vector<uint32_t> && toRemove)
-    : m_pointsToAdd(move(toAdd))
-    , m_pointsToRemove(move(toRemove))
+  UpdateGpsTrackPointsMessage(std::vector<GpsTrackPoint> && toAdd,
+                              std::vector<uint32_t> && toRemove)
+    : m_pointsToAdd(std::move(toAdd))
+    , m_pointsToRemove(std::move(toRemove))
   {}
 
   Type GetType() const override { return Message::UpdateGpsTrackPoints; }
 
-  vector<GpsTrackPoint> const & GetPointsToAdd() { return m_pointsToAdd; }
-  vector<uint32_t> const & GetPointsToRemove() { return m_pointsToRemove; }
+  std::vector<GpsTrackPoint> const & GetPointsToAdd() { return m_pointsToAdd; }
+  std::vector<uint32_t> const & GetPointsToRemove() { return m_pointsToRemove; }
 
 private:
-  vector<GpsTrackPoint> m_pointsToAdd;
-  vector<uint32_t> m_pointsToRemove;
+  std::vector<GpsTrackPoint> m_pointsToAdd;
+  std::vector<uint32_t> m_pointsToRemove;
 };
 
 class ClearGpsTrackPointsMessage : public Message
@@ -945,7 +873,6 @@ public:
   ClearGpsTrackPointsMessage() = default;
 
   Type GetType() const override { return Message::ClearGpsTrackPoints; }
-
 };
 
 class SetTimeInBackgroundMessage : public Message
@@ -1056,21 +983,8 @@ private:
   TrafficSegmentsColoring m_segmentsColoring;
 };
 
-class FlushTrafficDataMessage : public Message
-{
-public:
-  explicit FlushTrafficDataMessage(TrafficRenderData && trafficData)
-    : m_trafficData(move(trafficData))
-  {}
-
-  Type GetType() const override { return Message::FlushTrafficData; }
-  bool IsGLContextDependent() const override { return true; }
-
-  TrafficRenderData && AcceptTrafficData() { return move(m_trafficData); }
-
-private:
-  TrafficRenderData m_trafficData;
-};
+using FlushTrafficDataMessage = FlushRenderDataMessage<TrafficRenderData,
+                                                       Message::FlushTrafficData>;
 
 class ClearTrafficDataMessage : public Message
 {
@@ -1152,30 +1066,30 @@ private:
   TProperties m_properties;
 };
 
-class AddCustomSymbolsMessage : public Message
+class SetCustomFeaturesMessage : public Message
 {
 public:
-  explicit AddCustomSymbolsMessage(CustomSymbols && symbols)
-    : m_symbols(std::move(symbols))
+  explicit SetCustomFeaturesMessage(std::set<FeatureID> && ids)
+    : m_features(std::move(ids))
   {}
 
-  Type GetType() const override { return Message::AddCustomSymbols; }
+  Type GetType() const override { return Message::SetCustomFeatures; }
 
-  CustomSymbols && AcceptSymbols() { return std::move(m_symbols); }
+  std::set<FeatureID> && AcceptFeatures() { return std::move(m_features); }
 
 private:
-  CustomSymbols m_symbols;
+  std::set<FeatureID> m_features;
 };
 
-class RemoveCustomSymbolsMessage : public Message
+class RemoveCustomFeaturesMessage : public Message
 {
 public:
-  RemoveCustomSymbolsMessage() = default;
-  explicit RemoveCustomSymbolsMessage(MwmSet::MwmId const & mwmId)
+  RemoveCustomFeaturesMessage() = default;
+  explicit RemoveCustomFeaturesMessage(MwmSet::MwmId const & mwmId)
     : m_mwmId(mwmId), m_removeAll(false)
   {}
 
-  Type GetType() const override { return Message::RemoveCustomSymbols; }
+  Type GetType() const override { return Message::RemoveCustomFeatures; }
   bool NeedRemoveAll() const { return m_removeAll; }
   MwmSet::MwmId const & GetMwmId() const { return m_mwmId; }
 
@@ -1184,19 +1098,19 @@ private:
   bool m_removeAll = true;
 };
 
-class UpdateCustomSymbolsMessage : public Message
+class UpdateCustomFeaturesMessage : public Message
 {
 public:
-  explicit UpdateCustomSymbolsMessage(std::vector<FeatureID> && symbolsFeatures)
-    : m_symbolsFeatures(std::move(symbolsFeatures))
+  explicit UpdateCustomFeaturesMessage(std::vector<FeatureID> && features)
+    : m_features(std::move(features))
   {}
 
-  Type GetType() const override { return Message::UpdateCustomSymbols; }
+  Type GetType() const override { return Message::UpdateCustomFeatures; }
 
-  std::vector<FeatureID> && AcceptSymbolsFeatures() { return std::move(m_symbolsFeatures); }
+  std::vector<FeatureID> && AcceptFeatures() { return std::move(m_features); }
 
 private:
-  std::vector<FeatureID> m_symbolsFeatures;
+  std::vector<FeatureID> m_features;
 };
 
 class SetPostprocessStaticTexturesMessage : public Message
@@ -1207,6 +1121,7 @@ public:
   {}
 
   Type GetType() const override { return Message::SetPostprocessStaticTextures; }
+  bool IsGLContextDependent() const override { return true; }
 
   drape_ptr<PostprocessStaticTextures> && AcceptTextures() { return std::move(m_textures); }
 
@@ -1229,5 +1144,38 @@ public:
 private:
   PostprocessRenderer::Effect const m_effect;
   bool const m_enabled;
+};
+
+class RunFirstLaunchAnimationMessage : public Message
+{
+public:
+  Type GetType() const override { return Message::RunFirstLaunchAnimation; }
+};
+
+class UpdateMetalinesMessage : public Message
+{
+public:
+  Type GetType() const override { return Message::UpdateMetalines; }
+};
+
+class PostUserEventMessage : public Message
+{
+public:
+  PostUserEventMessage(drape_ptr<UserEvent> && event)
+    : m_event(std::move(event))
+  {}
+
+  Type GetType() const override { return Message::PostUserEvent; }
+
+  drape_ptr<UserEvent> && AcceptEvent() { return std::move(m_event); }
+
+private:
+  drape_ptr<UserEvent> m_event;
+};
+
+class FinishTexturesInitializationMessage : public Message
+{
+public:
+  Type GetType() const override { return Message::FinishTexturesInitialization; }
 };
 }  // namespace df

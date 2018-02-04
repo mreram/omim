@@ -22,7 +22,7 @@ namespace m2
 
     T x, y;
 
-    Point() {}
+    Point() : x(T()), y(T()) {}
     Point(T x_, T y_) : x(x_), y(y_) {}
     template <typename U> Point(Point<U> const & u) : x(u.x), y(u.y) {}
 
@@ -133,11 +133,13 @@ namespace m2
       return m2::Point<T>((x + p.x) * 0.5, (y + p.y) * 0.5);
     }
 
+    T SquaredLength() const { return x * x + y * y; }
+
     /// @name VectorOperationsOnPoint
     // @{
     double Length() const
     {
-      return sqrt(x*x + y*y);
+      return sqrt(SquaredLength());
     }
 
     Point<T> Normalize() const
@@ -172,6 +174,9 @@ namespace m2
       x = cosAngle * oldX - sinAngle * y;
       y = sinAngle * oldX + cosAngle * y;
     }
+
+    // Returns vector rotated 90 degrees counterclockwise.
+    Point Ort() const { return Point(-y, x); }
 
     void Transform(m2::Point<T> const & org,
                    m2::Point<T> const & dx, m2::Point<T> const & dy)

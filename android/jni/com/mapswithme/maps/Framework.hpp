@@ -5,6 +5,8 @@
 #include "map/framework.hpp"
 #include "map/place_page_info.hpp"
 
+#include "ugc/api.hpp"
+
 #include "search/result.hpp"
 
 #include "drape_frontend/gui/skin.hpp"
@@ -13,6 +15,8 @@
 #include "drape/oglcontextfactory.hpp"
 
 #include "local_ads/event.hpp"
+
+#include "partners_api/locals_api.hpp"
 
 #include "platform/country_defines.hpp"
 #include "platform/location.hpp"
@@ -27,6 +31,9 @@
 #include <map>
 #include <memory>
 #include <mutex>
+
+class Index;
+struct FeatureID;
 
 namespace search
 {
@@ -68,6 +75,7 @@ namespace android
     Framework();
 
     storage::Storage & GetStorage();
+    Index const & GetIndex();
 
     void ShowNode(storage::TCountryId const & countryId, bool zoomToDownloadButton);
 
@@ -78,7 +86,8 @@ namespace android
 
     void Invalidate();
 
-    bool CreateDrapeEngine(JNIEnv * env, jobject jSurface, int densityDpi, bool firstLaunch);
+    bool CreateDrapeEngine(JNIEnv * env, jobject jSurface, int densityDpi, bool firstLaunch,
+                           bool launchByDeepLink);
     bool IsDrapeEngineCreated();
 
     void DetachSurface(bool destroyContext);
@@ -90,9 +99,13 @@ namespace android
 
     void SetupMeasurementSystem();
 
-    void SetRouter(routing::RouterType type) { m_work.SetRouter(type); }
-    routing::RouterType GetRouter() const { return m_work.GetRouter(); }
-    routing::RouterType GetLastUsedRouter() const { return m_work.GetLastUsedRouter(); }
+    RoutingManager & GetRoutingManager() { return m_work.GetRoutingManager(); }
+    void SetRouter(routing::RouterType type) { m_work.GetRoutingManager().SetRouter(type); }
+    routing::RouterType GetRouter() const { return m_work.GetRoutingManager().GetRouter(); }
+    routing::RouterType GetLastUsedRouter() const
+    {
+      return m_work.GetRoutingManager().GetLastUsedRouter();
+    }
 
     void Resize(int w, int h);
 
@@ -178,12 +191,26 @@ namespace android
     bool IsDownloadOn3gEnabled();
     void EnableDownloadOn3g();
 
-    uint64_t RequestUberProducts(JNIEnv * env, jobject policy, ms::LatLon const & from,
-                                 ms::LatLon const & to, uber::ProductsCallback const & callback,
-                                 uber::ErrorCallback const & errorCallback);
-    static uber::RideRequestLinks GetUberLinks(std::string const & productId, ms::LatLon const & from, ms::LatLon const & to);
+    uint64_t RequestTaxiProducts(JNIEnv * env, jobject policy, ms::LatLon const & from,
+                                 ms::LatLon const & to, taxi::SuccessCallback const & onSuccess,
+                                 taxi::ErrorCallback const & onError);
+    taxi::RideRequestLinks GetTaxiLinks(JNIEnv * env, jobject policy, taxi::Provider::Type type,
+                                        std::string const & productId, ms::LatLon const & from,
+                                        ms::LatLon const & to);
+
+    void RequestViatorProducts(JNIEnv * env, jobject policy, std::string const & destId,
+                               std::string const & currency,
+                               viator::GetTop5ProductsCallback const & callback);
+
+    void RequestUGC(FeatureID const & fid, ugc::Api::UGCCallback const & ugcCallback);
+    void SetUGCUpdate(FeatureID const & fid, ugc::UGCUpdate const & ugc);
+    void UploadUGC();
 
     int ToDoAfterUpdate() const;
+
+    uint64_t GetLocals(JNIEnv * env, jobject policy, double lat, double lon,
+                       locals::LocalsSuccessCallback const & successFn,
+                       locals::LocalsErrorCallback const & errorFn);
 
     void LogLocalAdsEvent(local_ads::EventType event, double lat, double lon, uint16_t accuracy);
   };

@@ -1,28 +1,111 @@
 #pragma once
 
+#include "search/common.hpp"
 #include "search/model.hpp"
 #include "search/query_params.hpp"
 
 #include "indexer/search_delimiters.hpp"
 #include "indexer/search_string_utils.hpp"
 
+#include "base/levenshtein_dfa.hpp"
 #include "base/stl_add.hpp"
 #include "base/string_utils.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <string>
 #include <vector>
 
+class CategoriesHolder;
+
+namespace feature
+{
+class TypesHolder;
+}
+
 namespace search
 {
 class QueryParams;
+class TokenSlice;
+
+class CategoriesInfo
+{
+public:
+  CategoriesInfo(feature::TypesHolder const & holder, TokenSlice const & tokens,
+                 Locales const & locales, CategoriesHolder const & categories);
+
+  // Returns true when all tokens correspond to categories in
+  // |holder|.
+  bool IsPureCategories() const { return m_pureCategories; }
+
+  // Returns true when all tokens are categories tokens but none of
+  // them correspond to categories in |holder|.
+  bool IsFalseCategories() const { return m_falseCategories; }
+
+private:
+  bool m_pureCategories = false;
+  bool m_falseCategories = false;
+};
+
+struct ErrorsMade
+{
+  static size_t constexpr kInfiniteErrors = std::numeric_limits<size_t>::max();
+
+  ErrorsMade() = default;
+  explicit ErrorsMade(size_t errorsMade) : m_errorsMade(errorsMade) {}
+
+  bool IsValid() const { return m_errorsMade != kInfiniteErrors; }
+
+  template <typename Fn>
+  static ErrorsMade Combine(ErrorsMade const & lhs, ErrorsMade const & rhs, Fn && fn)
+  {
+    if (!lhs.IsValid())
+      return rhs;
+    if (!rhs.IsValid())
+      return lhs;
+    return ErrorsMade(fn(lhs.m_errorsMade, rhs.m_errorsMade));
+  }
+
+  static ErrorsMade Min(ErrorsMade const & lhs, ErrorsMade const & rhs)
+  {
+    return Combine(lhs, rhs, [](size_t u, size_t v) { return std::min(u, v); });
+  }
+
+  static ErrorsMade Max(ErrorsMade const & lhs, ErrorsMade const & rhs)
+  {
+    return Combine(lhs, rhs, [](size_t u, size_t v) { return std::max(u, v); });
+  }
+
+  friend ErrorsMade operator+(ErrorsMade const & lhs, ErrorsMade const & rhs)
+  {
+    return Combine(lhs, rhs, [](size_t u, size_t v) { return u + v; });
+  }
+
+  ErrorsMade & operator+=(ErrorsMade const & rhs)
+  {
+    *this = *this + rhs;
+    return *this;
+  }
+
+  bool operator==(ErrorsMade const & rhs) const { return m_errorsMade == rhs.m_errorsMade; }
+
+  size_t m_errorsMade = kInfiniteErrors;
+};
+
+string DebugPrint(ErrorsMade const & errorsMade);
 
 namespace impl
 {
 bool FullMatch(QueryParams::Token const & token, strings::UniString const & text);
 
 bool PrefixMatch(QueryParams::Token const & token, strings::UniString const & text);
+
+// Returns the minimum number of errors needed to match |text| with
+// any of the |tokens|.  If it's not possible in accordance with
+// GetMaxErrorsForToken(|text|), returns kInfiniteErrors.
+ErrorsMade GetMinErrorsMade(std::vector<strings::UniString> const & tokens,
+                            strings::UniString const & text);
 }  // namespace impl
 
 // The order and numeric values are important here.  Please, check all
@@ -92,4 +175,30 @@ NameScore GetNameScore(std::vector<strings::UniString> const & tokens, Slice con
 }
 
 string DebugPrint(NameScore score);
+
+// Returns total number of errors that were made during matching
+// feature |tokens| by a query - query tokens are in |slice|.
+template <typename Slice>
+ErrorsMade GetErrorsMade(std::vector<strings::UniString> const & tokens, Slice const & slice)
+{
+  ErrorsMade totalErrorsMade;
+
+  for (size_t i = 0; i < slice.Size(); ++i)
+  {
+    ErrorsMade errorsMade;
+    slice.Get(i).ForEach([&](strings::UniString const & s) {
+      errorsMade = ErrorsMade::Min(errorsMade, impl::GetMinErrorsMade(tokens, s));
+    });
+
+    totalErrorsMade += errorsMade;
+  }
+
+  return totalErrorsMade;
+}
+
+template <typename Slice>
+ErrorsMade GetErrorsMade(std::string const & s, Slice const & slice)
+{
+  return GetErrorsMade({strings::MakeUniString(s)}, slice);
+}
 }  // namespace search

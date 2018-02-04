@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drape_frontend/custom_symbol.hpp"
+#include "drape_frontend/custom_features_context.hpp"
 #include "drape_frontend/engine_context.hpp"
 #include "drape_frontend/tile_key.hpp"
 
@@ -10,6 +10,7 @@
 #include "base/macros.hpp"
 
 #include <atomic>
+#include <set>
 #include <vector>
 
 class FeatureType;
@@ -46,6 +47,7 @@ private:
   drape_ptr<EngineContext> m_context;
   std::vector<FeatureID> m_featureInfo;
   std::atomic<bool> m_isCanceled;
+  std::set<MwmSet::MwmId> m_mwms;
 
   DISALLOW_COPY_AND_MOVE(TileInfo);
 };

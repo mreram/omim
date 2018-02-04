@@ -1,11 +1,15 @@
 #pragma once
 
-#include "generator/osm_id.hpp"
 #include "generator/road_access_generator.hpp"
 #include "generator/restriction_writer.hpp"
 
+#include "routing/cross_mwm_ids.hpp"
+
+#include "base/osm_id.hpp"
+
 #include <cstdint>
 #include <map>
+#include <string>
 
 namespace routing
 {

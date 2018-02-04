@@ -1,11 +1,14 @@
 #pragma once
 
-#include "defines.hpp"
-
-#include "base/logging.hpp"
+#include "generator/cities_boundaries_builder.hpp"
 
 #include "coding/file_name_utils.hpp"
 
+#include "base/logging.hpp"
+
+#include "defines.hpp"
+
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -44,6 +47,9 @@ struct GenerateInfo
   std::string m_bookingReferenceDir;
   std::string m_opentableDatafileName;
   std::string m_opentableReferenceDir;
+  std::string m_viatorDatafileName;
+
+  std::shared_ptr<generator::OsmIdToBoundariesTable> m_boundariesTable;
 
   uint32_t m_versionDate = 0;
 

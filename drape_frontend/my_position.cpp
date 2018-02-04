@@ -134,7 +134,7 @@ void MyPosition::RenderMyPosition(ScreenBase const & screen, int zoomLevel,
     uniforms.SetMatrix4x4Value("modelView", mv.m_data);
 
     m2::PointD const pos = MapShape::ConvertToLocal(m_position, key.GetGlobalRect().Center(), kShapeCoordScalar);
-    uniforms.SetFloatValue("u_position", pos.x, pos.y, dp::depth::MY_POSITION_MARK);
+    uniforms.SetFloatValue("u_position", pos.x, pos.y, dp::depth::kMyPositionMarkDepth);
     uniforms.SetFloatValue("u_azimut", -(m_azimuth + screen.GetAngle()));
     uniforms.SetFloatValue("u_opacity", 1.0);
     RenderPart(mng, uniforms, MY_POSITION_POINT);
@@ -164,7 +164,7 @@ void MyPosition::CacheAccuracySector(ref_ptr<dp::TextureManager> mng)
     buffer.emplace_back(nextNormal, colorCoord);
   }
 
-  dp::GLState state(gpu::ACCURACY_PROGRAM, dp::GLState::OverlayLayer);
+  auto state = CreateGLState(gpu::ACCURACY_PROGRAM, RenderState::OverlayLayer);
   state.SetColorTexture(color.GetTexture());
 
   {
@@ -215,7 +215,7 @@ void MyPosition::CachePointPosition(ref_ptr<dp::TextureManager> mng)
 
   m_arrow3d.SetTexture(mng);
 
-  dp::GLState state(gpu::MY_POSITION_PROGRAM, dp::GLState::OverlayLayer);
+  auto state = CreateGLState(gpu::MY_POSITION_PROGRAM, RenderState::OverlayLayer);
   state.SetColorTexture(pointSymbol.GetTexture());
 
   dp::TextureManager::SymbolRegion * symbols[kSymbolsCount] = { &pointSymbol };

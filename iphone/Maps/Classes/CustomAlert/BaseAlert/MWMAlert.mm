@@ -72,6 +72,9 @@
   case routing::IRouter::EndPointNotFound: return [MWMDefaultAlert endPointNotFoundAlert];
   case routing::IRouter::PointsInDifferentMWM: return [MWMDefaultAlert pointsInDifferentMWMAlert];
   case routing::IRouter::RouteNotFound:
+  case routing::IRouter::TransitRouteNotFoundNoNetwork:
+  case routing::IRouter::TransitRouteNotFoundTooLongPedestrian:
+  case routing::IRouter::RouteNotFoundRedressRouteError:
   case routing::IRouter::InconsistentMWMandRoute: return [MWMDefaultAlert routeNotFoundAlert];
   case routing::IRouter::RouteFileNotExist:
   case routing::IRouter::FileTooOld: return [MWMDefaultAlert routeFileNotExistAlert];
@@ -79,12 +82,13 @@
   case routing::IRouter::Cancelled:
   case routing::IRouter::NoError:
   case routing::IRouter::NeedMoreMaps: return nil;
+  case routing::IRouter::IntermediatePointNotFound: return [MWMDefaultAlert intermediatePointNotFoundAlert];
   }
 }
 
-+ (MWMAlert *)incorrectFeauturePositionAlert
++ (MWMAlert *)incorrectFeaturePositionAlert
 {
-  return [MWMDefaultAlert incorrectFeauturePositionAlert];
+  return [MWMDefaultAlert incorrectFeaturePositionAlert];
 }
 
 + (MWMAlert *)internalErrorAlert { return [MWMDefaultAlert internalErrorAlert]; }
@@ -156,13 +160,13 @@
 - (void)close:(MWMVoidBlock)completion { [self.alertController closeAlert:completion]; }
 - (void)setNeedsCloseAlertAfterEnterBackground
 {
-  [[NSNotificationCenter defaultCenter] addObserver:self
-                                           selector:@selector(applicationDidEnterBackground)
-                                               name:UIApplicationDidEnterBackgroundNotification
-                                             object:nil];
+  [NSNotificationCenter.defaultCenter addObserver:self
+                                         selector:@selector(applicationDidEnterBackground)
+                                             name:UIApplicationDidEnterBackgroundNotification
+                                           object:nil];
 }
 
-- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
+- (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
 - (void)applicationDidEnterBackground
 {
   // Should close alert when application entered background.
@@ -191,7 +195,7 @@
   view.frame = ownerViewController.view.bounds;
   [ownerViewController.view addSubview:view];
   [self addControllerViewToWindow];
-  auto const orientation = [[UIApplication sharedApplication] statusBarOrientation];
+  auto const orientation = UIApplication.sharedApplication.statusBarOrientation;
   [self rotate:orientation duration:0.0];
   [view addSubview:self];
   self.frame = view.bounds;

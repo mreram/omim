@@ -4,7 +4,6 @@
 
 #include "base/assert.hpp"
 #include "base/exception.hpp"
-#include "base/logging.hpp"
 
 #include <vector>
 
@@ -16,16 +15,19 @@ extern JavaVM * GetJVM()
 
 // Caching is necessary to create class from native threads.
 jclass g_mapObjectClazz;
+jclass g_featureIdClazz;
 jclass g_bookmarkClazz;
 jclass g_myTrackerClazz;
 jclass g_httpClientClazz;
 jclass g_httpParamsClazz;
-jclass g_httpHeaderClazz;
 jclass g_platformSocketClazz;
 jclass g_utilsClazz;
 jclass g_bannerClazz;
-jclass g_arrayListClazz;
+jclass g_ratingClazz;
 jclass g_loggerFactoryClazz;
+jclass g_keyValueClazz;
+jclass g_httpUploaderClazz;
+jclass g_httpUploaderResultClazz;
 
 extern "C"
 {
@@ -38,15 +40,19 @@ JNI_OnLoad(JavaVM * jvm, void *)
 
   JNIEnv * env = jni::GetEnv();
   g_mapObjectClazz = jni::GetGlobalClassRef(env, "com/mapswithme/maps/bookmarks/data/MapObject");
+  g_featureIdClazz = jni::GetGlobalClassRef(env, "com/mapswithme/maps/bookmarks/data/FeatureId");
   g_bookmarkClazz = jni::GetGlobalClassRef(env, "com/mapswithme/maps/bookmarks/data/Bookmark");
   g_myTrackerClazz = jni::GetGlobalClassRef(env, "com/my/tracker/MyTracker");
   g_httpClientClazz = jni::GetGlobalClassRef(env, "com/mapswithme/util/HttpClient");
   g_httpParamsClazz = jni::GetGlobalClassRef(env, "com/mapswithme/util/HttpClient$Params");
-  g_httpHeaderClazz = jni::GetGlobalClassRef(env, "com/mapswithme/util/HttpClient$HttpHeader");
   g_platformSocketClazz = jni::GetGlobalClassRef(env, "com/mapswithme/maps/location/PlatformSocket");
   g_utilsClazz = jni::GetGlobalClassRef(env, "com/mapswithme/util/Utils");
   g_bannerClazz = jni::GetGlobalClassRef(env, "com/mapswithme/maps/ads/Banner");
+  g_ratingClazz = jni::GetGlobalClassRef(env, "com/mapswithme/maps/ugc/UGC$Rating");
   g_loggerFactoryClazz = jni::GetGlobalClassRef(env, "com/mapswithme/util/log/LoggerFactory");
+  g_keyValueClazz = jni::GetGlobalClassRef(env, "com/mapswithme/util/KeyValue");
+  g_httpUploaderClazz = jni::GetGlobalClassRef(env, "com/mapswithme/util/HttpUploader");
+  g_httpUploaderResultClazz = jni::GetGlobalClassRef(env, "com/mapswithme/util/HttpUploader$Result");
 
   return JNI_VERSION_1_6;
 }
@@ -57,15 +63,19 @@ JNI_OnUnload(JavaVM *, void *)
   g_jvm = 0;
   JNIEnv * env = jni::GetEnv();
   env->DeleteGlobalRef(g_mapObjectClazz);
+  env->DeleteGlobalRef(g_featureIdClazz);
   env->DeleteGlobalRef(g_bookmarkClazz);
   env->DeleteGlobalRef(g_myTrackerClazz);
   env->DeleteGlobalRef(g_httpClientClazz);
   env->DeleteGlobalRef(g_httpParamsClazz);
-  env->DeleteGlobalRef(g_httpHeaderClazz);
   env->DeleteGlobalRef(g_platformSocketClazz);
   env->DeleteGlobalRef(g_utilsClazz);
   env->DeleteGlobalRef(g_bannerClazz);
+  env->DeleteGlobalRef(g_ratingClazz);
   env->DeleteGlobalRef(g_loggerFactoryClazz);
+  env->DeleteGlobalRef(g_keyValueClazz);
+  env->DeleteGlobalRef(g_httpUploaderClazz);
+  env->DeleteGlobalRef(g_httpUploaderResultClazz);
 }
 } // extern "C"
 
@@ -103,6 +113,13 @@ jmethodID GetStaticMethodID(JNIEnv * env, jclass clazz, char const * name, char 
   jmethodID mid = env->GetStaticMethodID(clazz, name, signature);
   ASSERT(mid, ("Can't get static method ID", name, signature, DescribeException()));
   return mid;
+}
+
+jfieldID GetStaticFieldID(JNIEnv * env, jclass clazz, char const * name, char const * signature)
+{
+  jfieldID fid = env->GetStaticFieldID(clazz, name, signature);
+  ASSERT(fid, ("Can't get static field ID", name, signature, DescribeException()));
+  return fid;
 }
 
 jmethodID GetConstructorID(JNIEnv * env, jclass clazz, char const * signature)
@@ -199,10 +216,27 @@ bool HandleJavaException(JNIEnv * env)
      const jthrowable e = env->ExceptionOccurred();
      env->ExceptionDescribe();
      env->ExceptionClear();
-     LOG(LERROR, (ToNativeString(env, e)));
+     my::LogLevel level = GetLogLevelForException(env, e);
+     LOG(level, (ToNativeString(env, e)));
      return true;
    }
    return false;
+}
+
+my::LogLevel GetLogLevelForException(JNIEnv * env, const jthrowable & e)
+{
+  static jclass const errorClass = jni::GetGlobalClassRef(env, "java/lang/Error");
+  ASSERT(errorClass, (jni::DescribeException()));
+  static jclass const runtimeExceptionClass =
+    jni::GetGlobalClassRef(env, "java/lang/RuntimeException");
+  ASSERT(runtimeExceptionClass, (jni::DescribeException()));
+  // If Unchecked Exception or Error is occurred during Java call the app should fail immediately.
+  // In other cases, just a warning message about exception (Checked Exception)
+  // will be written into LogCat.
+  if (env->IsInstanceOf(e, errorClass) || env->IsInstanceOf(e, runtimeExceptionClass))
+    return LERROR;
+
+  return LWARNING;
 }
 
 std::string DescribeException()
@@ -256,5 +290,31 @@ void DumpDalvikReferenceTables()
   jmethodID dump_mid = env->GetStaticMethodID(vm_class, "dumpReferenceTables", "()V");
   env->CallStaticVoidMethod(vm_class, dump_mid);
   env->DeleteLocalRef(vm_class);
+}
+
+jobject ToKeyValue(JNIEnv * env, std::pair<std::string, std::string> src)
+{
+  static jmethodID const keyValueInit = jni::GetConstructorID(
+    env, g_keyValueClazz, "(Ljava/lang/String;Ljava/lang/String;)V");
+
+  jni::TScopedLocalRef key(env, jni::ToJavaString(env, src.first));
+  jni::TScopedLocalRef value(env, jni::ToJavaString(env, src.second));
+
+  return env->NewObject(g_keyValueClazz, keyValueInit, key.get(), value.get());
+}
+
+std::pair<std::string, std::string> ToNativeKeyValue(JNIEnv * env, jobject pairOfStrings)
+{
+  static jfieldID const keyId = env->GetFieldID(g_keyValueClazz, "mKey",
+                                                  "Ljava/lang/String;");
+  static jfieldID const valueId = env->GetFieldID(g_keyValueClazz, "mValue",
+                                                   "Ljava/lang/String;");
+
+  jni::ScopedLocalRef<jstring> const key(
+    env, static_cast<jstring>(env->GetObjectField(pairOfStrings, keyId)));
+  jni::ScopedLocalRef<jstring> const value(
+    env, static_cast<jstring>(env->GetObjectField(pairOfStrings, valueId)));
+
+  return { jni::ToNativeString(env, key.get()), jni::ToNativeString(env, value.get()) };
 }
 }  // namespace jni

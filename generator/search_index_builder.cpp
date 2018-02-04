@@ -161,12 +161,12 @@ struct FeatureNameInserter
     m_keyValuePairs.emplace_back(key, m_val);
   }
 
-  bool operator()(signed char lang, string const & name) const
+  void operator()(signed char lang, string const & name) const
   {
     strings::UniString const uniName = search::NormalizeAndSimplifyString(name);
 
     // split input string on tokens
-    buffer_vector<strings::UniString, 32> tokens;
+    search::QueryTokens tokens;
     SplitUniString(uniName, MakeBackInsertFunctor(tokens), search::Delimiters());
 
     // add synonyms for input native string
@@ -178,7 +178,8 @@ struct FeatureNameInserter
                           });
     }
 
-    int const maxTokensCount = search::MAX_TOKENS - 1;
+    static_assert(search::kMaxNumTokens > 0, "");
+    size_t const maxTokensCount = search::kMaxNumTokens - 1;
     if (tokens.size() > maxTokensCount)
     {
       LOG(LWARNING, ("Name has too many tokens:", name));
@@ -199,8 +200,6 @@ struct FeatureNameInserter
       for (auto const & token : tokens)
         AddToken(lang, token);
     }
-
-    return true;
   }
 };
 
@@ -466,8 +465,8 @@ bool BuildSearchIndexFromDataFile(string const & filename, bool forceRebuild)
 
 void BuildSearchIndex(FilesContainerR & container, Writer & indexWriter)
 {
-  using TKey = strings::UniString;
-  using TValue = FeatureIndexValue;
+  using Key = strings::UniString;
+  using Value = FeatureIndexValue;
 
   Platform & platform = GetPlatform();
 
@@ -478,15 +477,15 @@ void BuildSearchIndex(FilesContainerR & container, Writer & indexWriter)
 
   FeaturesVectorTest features(container);
   auto codingParams = trie::GetCodingParams(features.GetHeader().GetDefCodingParams());
-  SingleValueSerializer<TValue> serializer(codingParams);
+  SingleValueSerializer<Value> serializer(codingParams);
 
-  vector<pair<TKey, TValue>> searchIndexKeyValuePairs;
+  vector<pair<Key, Value>> searchIndexKeyValuePairs;
   AddFeatureNameIndexPairs(features, categoriesHolder, searchIndexKeyValuePairs);
 
   sort(searchIndexKeyValuePairs.begin(), searchIndexKeyValuePairs.end());
   LOG(LINFO, ("End sorting strings:", timer.ElapsedSeconds()));
 
-  trie::Build<Writer, TKey, ValueList<TValue>, SingleValueSerializer<TValue>>(
+  trie::Build<Writer, Key, ValueList<Value>, SingleValueSerializer<Value>>(
       indexWriter, serializer, searchIndexKeyValuePairs);
 
   LOG(LINFO, ("End building search index, elapsed seconds:", timer.ElapsedSeconds()));

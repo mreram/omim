@@ -61,6 +61,7 @@ string DebugPrint(Props props)
   case osm::Props::Wikipedia: k = "wikipedia"; break;
   case osm::Props::Flats: k = "addr:flats"; break;
   case osm::Props::BuildingLevels: k = "building:levels"; break;
+  case osm::Props::Level: k = "level"; break;
   }
   return k;
 }
@@ -193,9 +194,17 @@ string MapObject::GetWikipediaLink() const { return m_metadata.GetWikiURL(); }
 
 string MapObject::GetFlats() const { return m_metadata.Get(feature::Metadata::FMD_FLATS); }
 
+string MapObject::GetLevel() const { return m_metadata.Get(feature::Metadata::FMD_LEVEL); }
+
 string MapObject::GetBuildingLevels() const
 {
   return m_metadata.Get(feature::Metadata::FMD_BUILDING_LEVELS);
+}
+
+ftraits::WheelchairAvailability MapObject::GetWheelchairType() const
+{
+  auto const opt = ftraits::Wheelchair::GetValue(m_types);
+  return opt ? *opt : ftraits::WheelchairAvailability::No;
 }
 
 feature::Metadata const & MapObject::GetMetadata() const { return m_metadata; }

@@ -39,6 +39,8 @@ private:
     bool operator==(Vertex const & rhs) const;
     bool operator!=(Vertex const & rhs) const { return !(*this == rhs); }
 
+    m2::PointD GetPoint() const { return m_junction.GetPoint(); }
+
     routing::Junction m_junction;
     routing::Junction m_stageStart;
     double m_stageStartDistance = 0.0;
@@ -123,8 +125,6 @@ private:
   }
 
   double GetWeight(Edge const & e) const { return GetWeight(e.m_raw); }
-
-  bool PassesRestriction(routing::Edge const & edge, FunctionalRoadClass const restriction) const;
 
   uint32_t GetReverseBearing(Vertex const & u, Links const & links) const;
 

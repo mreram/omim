@@ -88,6 +88,7 @@ UniString MakeUniString(std::string const & utf8s);
 std::string ToUtf8(UniString const & s);
 bool IsASCIIString(std::string const & str);
 bool IsASCIIDigit(UniChar c);
+bool IsASCIISpace(UniChar c);
 bool IsASCIILatin(UniChar c);
 
 inline std::string DebugPrint(UniString const & s) { return ToUtf8(s); }
@@ -455,6 +456,8 @@ bool StartsWith(IterT1 beg, IterT1 end, IterT2 begPrefix, IterT2 endPrefix)
 bool StartsWith(UniString const & s, UniString const & p);
 
 bool StartsWith(std::string const & s1, char const * s2);
+
+bool StartsWith(std::string const & s1, std::string const & s2);
 
 bool EndsWith(std::string const & s1, char const * s2);
 

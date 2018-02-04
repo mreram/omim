@@ -20,6 +20,7 @@
   <color name="black_primary">#DE000000</color>   <!-- 87% black -->
   <color name="black_secondary">#8A000000</color> <!-- 54% black -->
   <color name="black_lightest">#61000000</color>  <!-- 38% black -->
+  <color name="black_4">#0A000000</color> <!-- 4% black -->
   <color name="black_8">#14000000</color> <!-- 8% black -->
   <color name="black_11">#1E000000</color> <!-- 11% black -->
   <color name="black_24">#3D000000</color> <!-- 24% black -->
@@ -27,6 +28,7 @@
   <color name="white_primary">#FFFFFFFF</color>   <!-- 100% white -->
   <color name="white_secondary">#B3FFFFFF</color> <!-- 70% white -->
   <color name="white_lightest">#4CFFFFFF</color>  <!-- 50% white -->
+  <color name="white_4">#0AFFFFFF</color> <!-- 4% white -->
   <color name="white_8">#14FFFFFF</color> <!-- 8% white -->
   <color name="white_11">#1EFFFFFF</color> <!-- 11% white -->
   <color name="white_12">#1Effffff</color> <!-- 12% white -->
@@ -82,6 +84,8 @@
   <color name="bg_placepage_rating_negative">#FFCDD2</color>
   <color name="bg_placepage_rating_negative_night">#1EFFEBF0</color>
 
+  <color name="bg_search_available_hotel">#1A43A047</color>
+
   <!-- Buttons -->
   <color name="button">@color/button_normal</color>
   <color name="button_night">@color/button_normal_night</color>
@@ -120,15 +124,11 @@
 
   <!-- Routing-->
   <color name="bg_routing_progress">#1F000000</color>
-  <color name="routing_slot_background">#FFFFFFFF</color>
-  <color name="routing_slot_background_night">@color/bg_panel_night</color>
-  <color name="routing_slot_background_pressed">#FFF0F0F0</color>
-  <color name="routing_slot_background_pressed_night">@color/bg_window_night</color>
-  <color name="routing_slot_shadow">#3D000000</color>
   <color name="routing_button_tint">#FFFFFFFF</color>
   <color name="routing_button_activated_tint">@color/bg_statusbar</color>
   <color name="routing_button_activated_tint_night">@color/bg_statusbar_night</color>
   <color name="routing_button_pressed_tint">#80FFFFFF</color>
+  <color name="routing_intermediate_point">#43A047</color>
 
 
   <color name="bs_divider_color">@color/divider</color>
@@ -160,8 +160,10 @@
   <color name="bg_brand_booking_pressed">#FF1B549E</color>
   <color name="bg_brand_opentable">#FFDA3743</color>
   <color name="bg_brand_opentable_pressed">#FFFC5965</color>
+  <color name="bg_brand_partner1">#FFFFDA00</color>
+  <color name="bg_brand_partner1_pressed">#FFF2CE00</color>
 
-  <!-- Banner colors-->
+  <!-- Banner colors -->
   <color name="bg_banner_color">#FFFFFBF3</color>
   <color name="bg_banner_color_night">#FF484C50</color>
   <color name="text_banner_color">#28000000</color>
@@ -174,4 +176,12 @@
   <color name="banner_action_btn_end_anim">#FFD9D2C3</color>
   <color name="banner_action_btn_end_anim_night">#FF71736C</color>
 
+  <!-- Rating colors -->
+  <color name="rating_excellent">#43A047</color>
+  <color name="rating_good">#7CB342</color>
+  <color name="rating_normal">#F5B027</color>
+  <color name="rating_bad">#F4511E</color>
+  <color name="rating_horrible">#E53935</color>
+  <color name="rating_none">#FF888A82</color>
+  <color name="rating_coming_soon">#FF1E96F0</color>
 </resources>

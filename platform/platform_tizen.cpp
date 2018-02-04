@@ -43,6 +43,7 @@ Platform::Platform()
   m_flags[HAS_ROUTING] = true;
 }
 
+// static
 void Platform::MkDir(string const & dirName) const
 {
   Tizen::Io::Directory::Create(dirName.c_str(), true);
@@ -55,12 +56,6 @@ string Platform::UniqueClientId() const
 }
 
 void Platform::RunOnGuiThread(TFunctor const & fn)
-{
-  /// @todo
-  fn();
-}
-
-void Platform::RunAsync(TFunctor const & fn, Priority p)
 {
   /// @todo
   fn();
@@ -103,6 +98,11 @@ Platform::EConnectionType Platform::ConnectionStatus()
 {
   // @TODO Add implementation
   return EConnectionType::CONNECTION_NONE;
+}
+
+Platform::ChargingStatus Platform::GetChargingStatus()
+{
+  return Platform::ChargingStatus::Unknown;
 }
 
 void Platform::GetSystemFontNames(FilesList & res) const

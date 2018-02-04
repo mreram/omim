@@ -1,13 +1,12 @@
 #include "indexer/feature_covering.hpp"
+
 #include "indexer/cell_coverer.hpp"
 #include "indexer/cell_id.hpp"
 #include "indexer/feature.hpp"
+#include "indexer/locality_object.hpp"
 #include "indexer/scales.hpp"
 
 #include "geometry/covering_utils.hpp"
-
-#include "std/vector.hpp"
-
 
 namespace
 {
@@ -113,25 +112,23 @@ public:
   }
 };
 
-}
-
-namespace covering
-{
-
-vector<int64_t> CoverFeature(FeatureType const & f, int cellDepth, uint64_t cellPenaltyArea)
+void GetIntersection(FeatureType const & f, FeatureIntersector & fIsect)
 {
   // We need to cover feature for the best geometry, because it's indexed once for the
   // first top level scale. Do reset current cached geometry first.
   f.ResetGeometry();
   int const scale = FeatureType::BEST_GEOMETRY;
 
-  FeatureIntersector fIsect;
   f.ForEachPoint(fIsect, scale);
   f.ForEachTriangle(fIsect, scale);
 
   CHECK(!(fIsect.m_trg.empty() && fIsect.m_polyline.empty()) &&
         f.GetLimitRect(scale).IsValid(), (f.DebugString(scale)));
+}
 
+vector<int64_t> CoverIntersection(FeatureIntersector const & fIsect, int cellDepth,
+                                  uint64_t cellPenaltyArea)
+{
   if (fIsect.m_trg.empty() && fIsect.m_polyline.size() == 1)
   {
     m2::PointD const pt = fIsect.m_polyline[0];
@@ -149,8 +146,27 @@ vector<int64_t> CoverFeature(FeatureType const & f, int cellDepth, uint64_t cell
 
   return res;
 }
+}
 
-void SortAndMergeIntervals(IntervalsT v, IntervalsT & res)
+namespace covering
+{
+vector<int64_t> CoverFeature(FeatureType const & f, int cellDepth, uint64_t cellPenaltyArea)
+{
+  FeatureIntersector fIsect;
+  GetIntersection(f, fIsect);
+  return CoverIntersection(fIsect, cellDepth, cellPenaltyArea);
+}
+
+vector<int64_t> CoverLocality(indexer::LocalityObject const & o, int cellDepth,
+                              uint64_t cellPenaltyArea)
+{
+  FeatureIntersector fIsect;
+  o.ForEachPoint(fIsect);
+  o.ForEachTriangle(fIsect);
+  return CoverIntersection(fIsect, cellDepth, cellPenaltyArea);
+}
+
+void SortAndMergeIntervals(Intervals v, Intervals & res)
 {
 #ifdef DEBUG
   ASSERT ( res.empty(), () );
@@ -170,14 +186,14 @@ void SortAndMergeIntervals(IntervalsT v, IntervalsT & res)
   }
 }
 
-IntervalsT SortAndMergeIntervals(IntervalsT const & v)
+Intervals SortAndMergeIntervals(Intervals const & v)
 {
-  IntervalsT res;
+  Intervals res;
   SortAndMergeIntervals(v, res);
   return res;
 }
 
-void AppendLowerLevels(RectId id, int cellDepth, IntervalsT & intervals)
+void AppendLowerLevels(RectId id, int cellDepth, Intervals & intervals)
 {
   int64_t idInt64 = id.ToInt64(cellDepth);
   intervals.push_back(make_pair(idInt64, idInt64 + id.SubTreeSize(cellDepth)));
@@ -189,13 +205,13 @@ void AppendLowerLevels(RectId id, int cellDepth, IntervalsT & intervals)
   }
 }
 
-void CoverViewportAndAppendLowerLevels(m2::RectD const & r, int cellDepth, IntervalsT & res)
+void CoverViewportAndAppendLowerLevels(m2::RectD const & r, int cellDepth, Intervals & res)
 {
   vector<RectId> ids;
   ids.reserve(SPLIT_RECT_CELLS_COUNT);
   CoverRect<MercatorBounds, RectId>(r, SPLIT_RECT_CELLS_COUNT, cellDepth, ids);
 
-  IntervalsT intervals;
+  Intervals intervals;
   for (size_t i = 0; i < ids.size(); ++i)
     AppendLowerLevels(ids[i], cellDepth, intervals);
 
@@ -222,7 +238,7 @@ int GetCodingDepth(int scale)
   return (RectId::DEPTH_LEVELS - delta);
 }
 
-IntervalsT const & CoveringGetter::Get(int scale)
+Intervals const & CoveringGetter::Get(int scale)
 {
   int const cellDepth = GetCodingDepth(scale);
   int const ind = (cellDepth == RectId::DEPTH_LEVELS ? 0 : 1);
@@ -245,7 +261,7 @@ IntervalsT const & CoveringGetter::Get(int scale)
       // Check for optimal result intervals.
 #if 0
       size_t oldSize = m_res[ind].size();
-      IntervalsT res;
+      Intervals res;
       SortAndMergeIntervals(m_res[ind], res);
       if (res.size() != oldSize)
         LOG(LINFO, ("Old =", oldSize, "; New =", res.size()));
@@ -255,7 +271,7 @@ IntervalsT const & CoveringGetter::Get(int scale)
     }
 
     case FullCover:
-      m_res[ind].push_back(IntervalsT::value_type(0, static_cast<int64_t>((1ULL << 63) - 1)));
+      m_res[ind].push_back(Intervals::value_type(0, static_cast<int64_t>((1ULL << 63) - 1)));
       break;
     }
   }

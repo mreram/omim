@@ -1,6 +1,6 @@
-#include "../../Framework.hpp"
+#include "com/mapswithme/maps/Framework.hpp"
 
-#include "../../../core/jni_helper.hpp"
+#include "com/mapswithme/core/jni_helper.hpp"
 
 
 namespace
@@ -80,14 +80,5 @@ Java_com_mapswithme_maps_bookmarks_data_Bookmark_nativeEncode2Ge0Url(
      JNIEnv * env, jobject thiz, jint cat, jlong bmk, jboolean addName)
 {
   return jni::ToJavaString(env, frm()->CodeGe0url(getBookmark(cat, bmk), addName));
-}
-
-JNIEXPORT jstring JNICALL
-Java_com_mapswithme_maps_bookmarks_data_Bookmark_nativeGetAddress(
-     JNIEnv * env, jobject thiz, jint catId, jlong bmkId)
-{
-  Bookmark const * bmk = getBookmark(catId, bmkId);
-  search::AddressInfo const address = g_framework->NativeFramework()->GetAddressInfoAtPoint(MercatorBounds::FromLatLon(bmk->GetLatLon()));
-  return jni::ToJavaString(env, address.FormatAddress());
 }
 } // extern "C"

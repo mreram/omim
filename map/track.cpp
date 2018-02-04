@@ -42,6 +42,11 @@ double Track::GetLengthMeters() const
   return res;
 }
 
+df::RenderState::DepthLayer Track::GetDepthLayer() const
+{
+  return df::RenderState::UserLineLayer;
+}
+
 size_t Track::GetLayerCount() const
 {
   return m_params.m_colors.size();
@@ -57,17 +62,12 @@ float Track::GetWidth(size_t layerIndex) const
   return m_params.m_colors[layerIndex].m_lineWidth;
 }
 
-float Track::GetLayerDepth(size_t layerIndex) const
+float Track::GetDepth(size_t layerIndex) const
 {
-  return 0 + layerIndex * 10;
+  return layerIndex * 10;
 }
 
-size_t Track::GetPointCount() const
+std::vector<m2::PointD> const & Track::GetPoints() const
 {
-  return m_polyline.GetSize();
-}
-
-m2::PointD const & Track::GetPoint(size_t pointIndex) const
-{
-  return m_polyline.GetPoint(pointIndex);
+  return m_polyline.GetPoints();
 }

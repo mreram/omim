@@ -11,7 +11,6 @@
 
 namespace dp
 {
-
 uint32_t const kMaxStipplePenLength = 512;
 uint32_t const kStippleHeight = 1;
 
@@ -124,7 +123,8 @@ void StipplePenRasterizator::Rasterize(void * buffer)
   pixels[offset] = pixels[offset - 1];
 }
 
-ref_ptr<Texture::ResourceInfo> StipplePenIndex::ReserveResource(bool predefined, StipplePenKey const & key, bool & newResource)
+ref_ptr<Texture::ResourceInfo> StipplePenIndex::ReserveResource(bool predefined, StipplePenKey const & key,
+                                                                bool & newResource)
 {
   lock_guard<mutex> g(m_mappingLock);
 
@@ -167,12 +167,11 @@ ref_ptr<Texture::ResourceInfo> StipplePenIndex::MapResource(StipplePenKey const 
 void StipplePenIndex::UploadResources(ref_ptr<Texture> texture)
 {
   ASSERT(texture->GetFormat() == dp::ALPHA, ());
-  if (m_pendingNodes.empty())
-    return;
-
   TPendingNodes pendingNodes;
   {
     lock_guard<mutex> g(m_lock);
+    if (m_pendingNodes.empty())
+      return;
     m_pendingNodes.swap(pendingNodes);
   }
 
@@ -203,6 +202,4 @@ string DebugPrint(StipplePenHandle const & key)
   out << "0x" << hex << key.m_keyValue;
   return out.str();
 }
-
-}
-
+}  // namespace dp

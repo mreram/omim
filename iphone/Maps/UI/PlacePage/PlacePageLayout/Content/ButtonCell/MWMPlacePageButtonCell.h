@@ -1,8 +1,11 @@
-#import "MWMPlacePageData.h"
 #import "MWMTableViewCell.h"
-#import "MWMTypes.h"
 
 @protocol MWMPlacePageButtonsProtocol;
+
+namespace place_page
+{
+enum class ButtonsRows;
+}  // namespace place_page
 
 @interface MWMPlacePageButtonCell : MWMTableViewCell
 
@@ -15,5 +18,7 @@
 
 - (void)setEnabled:(BOOL)enabled;
 - (BOOL)isEnabled;
+
+- (place_page::ButtonsRows)rowType;
 
 @end

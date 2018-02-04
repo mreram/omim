@@ -1,10 +1,12 @@
+#include "generator/osm_source.hpp"
+
+#include "generator/cities_boundaries_builder.hpp"
 #include "generator/coastlines_generator.hpp"
 #include "generator/feature_generator.hpp"
 #include "generator/intermediate_data.hpp"
 #include "generator/intermediate_elements.hpp"
 #include "generator/osm_element.hpp"
 #include "generator/osm_o5m_source.hpp"
-#include "generator/osm_source.hpp"
 #include "generator/osm_translator.hpp"
 #include "generator/osm_xml_source.hpp"
 #include "generator/polygonizer.hpp"
@@ -14,7 +16,9 @@
 
 #include "generator/booking_dataset.hpp"
 #include "generator/opentable_dataset.hpp"
+#include "generator/viator_dataset.hpp"
 
+#include "indexer/city_boundary.hpp"
 #include "indexer/classificator.hpp"
 
 #include "platform/platform.hpp"
@@ -26,6 +30,8 @@
 
 #include "coding/file_name_utils.hpp"
 #include "coding/parse_xml.hpp"
+
+#include <memory>
 
 #include "defines.hpp"
 
@@ -243,7 +249,7 @@ public:
     // Assume that area places has better priority than point places at the very end ...
     /// @todo It was usefull when place=XXX type has any area fill style.
     /// Need to review priority logic here (leave the native osm label).
-    return !IsPoint();
+    return !IsPoint() && r.IsPoint();
   }
 
 private:
@@ -262,7 +268,6 @@ private:
   m2::PointD m_pt;
   uint32_t m_type;
   double m_thresholdM;
-
 };
 
 class MainFeaturesEmitter : public EmitterBase
@@ -284,6 +289,8 @@ class MainFeaturesEmitter : public EmitterBase
 
   generator::BookingDataset m_bookingDataset;
   generator::OpentableDataset m_opentableDataset;
+  generator::ViatorDataset m_viatorDataset;
+  shared_ptr<generator::OsmIdToBoundariesTable> m_boundariesTable;
 
   /// Used to prepare a list of cities to serve as a list of nodes
   /// for building a highway graph with OSRM for low zooms.
@@ -300,7 +307,25 @@ class MainFeaturesEmitter : public EmitterBase
   };
   uint32_t m_types[TYPES_COUNT];
 
-  inline uint32_t Type(TypeIndex i) const { return m_types[i]; }
+  uint32_t Type(TypeIndex i) const { return m_types[i]; }
+
+  uint32_t GetPlaceType(FeatureParams const & params) const
+  {
+    static uint32_t const placeType = classif().GetTypeByPath({"place"});
+    return params.FindType(placeType, 1);
+  }
+
+  void UnionEqualPlacesIds(Place const & place)
+  {
+    if (!m_boundariesTable)
+      return;
+
+    auto const id = place.GetFeature().GetLastOsmId();
+    m_places.ForEachInRect(place.GetLimitRect(), [&](Place const & p) {
+      if (p.IsEqual(place))
+        m_boundariesTable->Union(p.GetFeature().GetLastOsmId(), id);
+    });
+  }
 
 public:
   MainFeaturesEmitter(feature::GenerateInfo const & info)
@@ -308,6 +333,8 @@ public:
     , m_failOnCoasts(info.m_failOnCoasts)
     , m_bookingDataset(info.m_bookingDatafileName, info.m_bookingReferenceDir)
     , m_opentableDataset(info.m_opentableDatafileName, info.m_opentableReferenceDir)
+    , m_viatorDataset(info.m_viatorDatafileName)
+    , m_boundariesTable(info.m_boundariesTable)
   {
     Classificator const & c = classif();
 
@@ -346,17 +373,27 @@ public:
 
   void operator()(FeatureBuilder1 & fb) override
   {
-    static uint32_t const placeType = classif().GetTypeByPath({"place"});
-    uint32_t const type = fb.GetParams().FindType(placeType, 1);
+    uint32_t const type = GetPlaceType(fb.GetParams());
 
     // TODO(mgserigio): Would it be better to have objects that store callback
     // and can be piped: action-if-cond1 | action-if-cond-2 | ... ?
     // The first object which perform action terminates the cahin.
     if (type != ftype::GetEmptyValue() && !fb.GetName().empty())
     {
+      auto const viatorObjId = m_viatorDataset.FindMatchingObjectId(fb);
+      if (viatorObjId != generator::ViatorCity::InvalidObjectId())
+      {
+        m_viatorDataset.PreprocessMatchedOsmObject(viatorObjId, fb, [this, viatorObjId](FeatureBuilder1 & fb)
+        {
+          m_skippedElements << "VIATOR\t" << DebugPrint(fb.GetMostGenericOsmId())
+                            << '\t' << viatorObjId.Get() << endl;
+        });
+      }
+
+      Place const place(fb, type);
+      UnionEqualPlacesIds(place);
       m_places.ReplaceEqualInRect(
-          Place(fb, type),
-          [](Place const & p1, Place const & p2) { return p1.IsEqual(p2); },
+          place, [](Place const & p1, Place const & p2) { return p1.IsEqual(p2); },
           [](Place const & p1, Place const & p2) { return p1.IsBetterThan(p2); });
       return;
     }
@@ -386,6 +423,22 @@ public:
     }
 
     Emit(fb);
+  }
+
+  void EmitCityBoundary(FeatureBuilder1 const & fb, FeatureParams const & params) override
+  {
+    if (!m_boundariesTable)
+      return;
+
+    auto const type = GetPlaceType(params);
+    if (type == ftype::GetEmptyValue())
+      return;
+
+    auto const id = fb.GetLastOsmId();
+    m_boundariesTable->Append(id, indexer::CityBoundary(fb.GetOuterGeometry()));
+
+    Place const place(fb, type);
+    UnionEqualPlacesIds(place);
   }
 
   /// @return false if coasts are not merged and FLAG_fail_on_coasts is set
@@ -689,8 +742,8 @@ bool GenerateFeaturesImpl(feature::GenerateInfo & info, EmitterBase & emitter)
     OsmToFeatureTranslator<EmitterBase, TDataCache> parser(
         emitter, cache, info.m_makeCoasts ? classif().GetCoastType() : 0,
         info.GetAddressesFileName(), info.GetIntermediateFileName(RESTRICTIONS_FILENAME, ""),
-        info.GetIntermediateFileName(ROAD_ACCESS_FILENAME, "")
-        );
+        info.GetIntermediateFileName(ROAD_ACCESS_FILENAME, ""),
+        info.GetIntermediateFileName(METALINES_FILENAME, ""));
 
     TagAdmixer tagAdmixer(info.GetIntermediateFileName("ways", ".csv"),
                           info.GetIntermediateFileName("towns", ".csv"));

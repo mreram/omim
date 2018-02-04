@@ -3,6 +3,7 @@ package com.mapswithme.maps.widget.placepage;
 
 import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.annotation.StringRes;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -49,19 +50,19 @@ final class PlacePageButtons
     },
 
     BOOKING_SEARCH
-        {
-          @Override
-          int getTitle()
-          {
-            return R.string.booking_search;
-          }
+    {
+      @Override
+      int getTitle()
+      {
+        return R.string.booking_search;
+      }
 
-          @Override
-          int getIcon()
-          {
-            return R.drawable.ic_menu_search;
-          }
-        },
+      @Override
+      int getIcon()
+      {
+        return R.drawable.ic_menu_search;
+      }
+    },
 
     OPENTABLE
     {
@@ -77,6 +78,29 @@ final class PlacePageButtons
         return R.drawable.ic_opentable;
       }
     },
+
+    PARTNER1
+    {
+      @Override
+      int getTitle()
+      {
+        return R.string.sponsored_partner1_action;
+      }
+
+      @Override
+      int getIcon()
+      {
+        return R.drawable.ic_24px_logo_partner1;
+      }
+    },
+
+    PARTNER2,
+
+    PARTNER3,
+
+    PARTNER4,
+
+    PARTNER5,
 
     BACK
     {
@@ -138,6 +162,36 @@ final class PlacePageButtons
       }
     },
 
+    ROUTE_ADD
+    {
+      @Override
+      int getTitle()
+      {
+        return R.string.placepage_add_stop;
+      }
+
+      @Override
+      int getIcon()
+      {
+        return R.drawable.ic_route_via;
+      }
+    },
+
+    ROUTE_REMOVE
+    {
+      @Override
+      int getTitle()
+      {
+        return R.string.placepage_remove_stop;
+      }
+
+      @Override
+      int getIcon()
+      {
+        return R.drawable.ic_route_remove;
+      }
+    },
+
     SHARE
     {
       @Override
@@ -179,13 +233,24 @@ final class PlacePageButtons
       @Override
       int getIcon()
       {
-        return R.drawable.ic_phone;
+        return R.drawable.ic_place_page_phone;
       }
     };
 
-    abstract @StringRes int getTitle();
-    abstract @DrawableRes int getIcon();
+    @StringRes int getTitle()
+    {
+      throw new UnsupportedOperationException("Not supported!");
+    }
+
+    @DrawableRes int getIcon()
+    {
+      throw new UnsupportedOperationException("Not supported!");
+    }
   }
+
+  private static final Item[] PARTNERS_ITEMS = new Item[] { Item.PARTNER1, Item.PARTNER2,
+                                                            Item.PARTNER3, Item.PARTNER4,
+                                                            Item.PARTNER5 };
 
   interface ItemListener
   {
@@ -202,6 +267,14 @@ final class PlacePageButtons
     MAX_BUTTONS = mPlacePage.getContext().getResources().getInteger(R.integer.pp_buttons_max);
   }
 
+  @NonNull
+  static Item getPartnerItem(int partnerIndex)
+  {
+    if (partnerIndex < 0 || partnerIndex >= PARTNERS_ITEMS.length)
+      throw new AssertionError("Wrong partner index: " + partnerIndex);
+    return PARTNERS_ITEMS[partnerIndex];
+  }
+
   private @NonNull List<Item> collectButtons(List<Item> items)
   {
     List<Item> res = new ArrayList<>(items);
@@ -212,13 +285,25 @@ final class PlacePageButtons
     int from = res.indexOf(Item.ROUTE_FROM);
     if (from > -1)
     {
+      int addStop = res.indexOf(Item.ROUTE_ADD);
       int to = res.indexOf(Item.ROUTE_TO);
-      if (to > from && to >= MAX_BUTTONS)
+      if ((to > from && to >= MAX_BUTTONS) || (to > from && addStop >= MAX_BUTTONS))
         Collections.swap(res, from, to);
+
+      if (addStop >= MAX_BUTTONS)
+      {
+        from = res.indexOf(Item.ROUTE_FROM);
+        if (addStop > from)
+          Collections.swap(res, from, addStop);
+      }
 
       preserveRoutingButtons(res, Item.CALL);
       preserveRoutingButtons(res, Item.BOOKING);
       preserveRoutingButtons(res, Item.BOOKING_SEARCH);
+      from = res.indexOf(Item.ROUTE_FROM);
+      to = res.indexOf(Item.ROUTE_TO);
+      if (from < MAX_BUTTONS && from > to)
+        Collections.swap(res, to, from);
     }
 
     return res;
@@ -235,8 +320,18 @@ final class PlacePageButtons
       items.remove(pos);
       items.add(MAX_BUTTONS, itemToShift);
       int to = items.indexOf(Item.ROUTE_TO);
-      items.remove(Item.ROUTE_FROM);
-      items.add(to + 1, Item.ROUTE_FROM);
+      if (items.indexOf(Item.ROUTE_ADD) > -1)
+      {
+        items.remove(Item.ROUTE_ADD);
+        items.remove(Item.ROUTE_FROM);
+        items.add(to + 1, Item.ROUTE_ADD);
+        items.add(MAX_BUTTONS, Item.ROUTE_FROM);
+      }
+      else
+      {
+        items.remove(Item.ROUTE_FROM);
+        items.add(to + 1, Item.ROUTE_FROM);
+      }
     }
   }
 

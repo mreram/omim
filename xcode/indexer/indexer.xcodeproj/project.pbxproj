@@ -42,6 +42,13 @@
 		34AF87E61DBE565F00E5E7DC /* helpers.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 34AF87E41DBE565F00E5E7DC /* helpers.hpp */; };
 		34AF87E71DBE567C00E5E7DC /* libindexer_tests_support.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 34AF87D71DBE561400E5E7DC /* libindexer_tests_support.a */; };
 		34AF87E81DBE570200E5E7DC /* helpers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 34AF87E31DBE565F00E5E7DC /* helpers.cpp */; };
+		3D0AEAF81FBAF9E900AD042B /* test_with_classificator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D0AEAF41FBAF9E900AD042B /* test_with_classificator.cpp */; };
+		3D0AEAF91FBAF9E900AD042B /* test_with_custom_mwms.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 3D0AEAF51FBAF9E900AD042B /* test_with_custom_mwms.hpp */; };
+		3D0AEAFA1FBAF9E900AD042B /* test_with_custom_mwms.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D0AEAF61FBAF9E900AD042B /* test_with_custom_mwms.cpp */; };
+		3D0AEAFB1FBAF9E900AD042B /* test_with_classificator.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 3D0AEAF71FBAF9E900AD042B /* test_with_classificator.hpp */; };
+		3D452AFA1EE6D9F5009EAB9B /* wheelchair_tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D452AF71EE6D9F5009EAB9B /* wheelchair_tests.cpp */; };
+		3D452AFB1EE6D9F5009EAB9B /* feature_names_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D452AF81EE6D9F5009EAB9B /* feature_names_test.cpp */; };
+		3D452AFC1EE6D9F5009EAB9B /* centers_table_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D452AF91EE6D9F5009EAB9B /* centers_table_test.cpp */; };
 		3D489BC61D3D220F0052AA38 /* editable_map_object_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D489BA71D3D1F8A0052AA38 /* editable_map_object_test.cpp */; };
 		3D489BC71D3D22150052AA38 /* features_vector_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D489BA81D3D1F8A0052AA38 /* features_vector_test.cpp */; };
 		3D489BC81D3D22190052AA38 /* string_slice_tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D489BA91D3D1F8A0052AA38 /* string_slice_tests.cpp */; };
@@ -59,8 +66,22 @@
 		3D51BC431D5E4E2B00F1FA8D /* test_mwm_set.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 56C74C2D1C749E8100B71B9F /* test_mwm_set.hpp */; };
 		3D51BC451D5E4EBF00F1FA8D /* libsearch_tests_support.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D51BC441D5E4EBF00F1FA8D /* libsearch_tests_support.a */; };
 		3D74ABBC1EA67C1E0063A898 /* ftypes_mapping.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 3D74ABBB1EA67C1E0063A898 /* ftypes_mapping.hpp */; };
+		3D74EF241F8F559D0081202C /* ugc_types_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D74EF231F8F559D0081202C /* ugc_types_test.cpp */; };
 		3D928F671D50F9FE001670E0 /* index_helpers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D928F651D50F9FE001670E0 /* index_helpers.cpp */; };
 		3D928F681D50F9FE001670E0 /* index_helpers.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 3D928F661D50F9FE001670E0 /* index_helpers.hpp */; };
+		40009062201F5CB000963E18 /* cell_value_pair.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 4000905D201F5CAF00963E18 /* cell_value_pair.hpp */; };
+		40009063201F5CB000963E18 /* locality_object.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4000905E201F5CAF00963E18 /* locality_object.cpp */; };
+		40009064201F5CB000963E18 /* locality_index_builder.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 4000905F201F5CAF00963E18 /* locality_index_builder.hpp */; };
+		40009065201F5CB000963E18 /* locality_object.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 40009060201F5CB000963E18 /* locality_object.hpp */; };
+		40009066201F5CB000963E18 /* locality_index_builder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 40009061201F5CB000963E18 /* locality_index_builder.cpp */; };
+		4095DEB22020AC0000C591A3 /* locality_index.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 4095DEB12020AC0000C591A3 /* locality_index.hpp */; };
+		4099F6491FC7142A002A7B05 /* fake_feature_ids.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4099F6471FC71429002A7B05 /* fake_feature_ids.cpp */; };
+		4099F64A1FC7142A002A7B05 /* fake_feature_ids.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 4099F6481FC7142A002A7B05 /* fake_feature_ids.hpp */; };
+		456B3FB41EDEEB65009B3D1F /* scales_patch.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 456B3FB31EDEEB65009B3D1F /* scales_patch.hpp */; };
+		456E1B181F90E5B7009C32E1 /* cities_boundaries_serdes.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 456E1B141F90E5B6009C32E1 /* cities_boundaries_serdes.hpp */; };
+		456E1B191F90E5B7009C32E1 /* ftypes_sponsored.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 456E1B151F90E5B6009C32E1 /* ftypes_sponsored.cpp */; };
+		456E1B1A1F90E5B7009C32E1 /* ftypes_sponsored.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 456E1B161F90E5B6009C32E1 /* ftypes_sponsored.hpp */; };
+		456E1B1B1F90E5B7009C32E1 /* city_boundary.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 456E1B171F90E5B7009C32E1 /* city_boundary.hpp */; };
 		45C108B11E9CFE41000FE1F6 /* polyline_point_to_int64_test.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 45C108AF1E9CFE3E000FE1F6 /* polyline_point_to_int64_test.cpp */; };
 		45C108BD1E9D0067000FE1F6 /* libicu.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 45C108BC1E9D0067000FE1F6 /* libicu.a */; };
 		45C108BF1E9D008D000FE1F6 /* librouting_common.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 45C108BE1E9D008D000FE1F6 /* librouting_common.a */; };
@@ -119,9 +140,6 @@
 		670C61401AB066CD00C38A8C /* libindexer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6753409A1A3F53CB00A0A8C3 /* libindexer.a */; };
 		670C615B1AB0691900C38A8C /* features_offsets_table.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 670C61581AB0691900C38A8C /* features_offsets_table.cpp */; };
 		670C615C1AB0691900C38A8C /* features_offsets_table.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 670C61591AB0691900C38A8C /* features_offsets_table.hpp */; };
-		670D04AB1B0BA8580013A7AC /* feature_loader_101.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 670D04A81B0BA8580013A7AC /* feature_loader_101.cpp */; };
-		670D04AC1B0BA8580013A7AC /* feature_loader_101.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 670D04A91B0BA8580013A7AC /* feature_loader_101.hpp */; };
-		670D04AD1B0BA8580013A7AC /* interval_index_101.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 670D04AA1B0BA8580013A7AC /* interval_index_101.hpp */; };
 		670EE56C1B60033A001E8064 /* features_vector.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 670EE56A1B60033A001E8064 /* features_vector.cpp */; };
 		670EE56D1B60033A001E8064 /* unique_index.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 670EE56B1B60033A001E8064 /* unique_index.hpp */; };
 		6726C1D11A49DAAC005EEA39 /* feature_meta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6726C1CF1A49DAAC005EEA39 /* feature_meta.cpp */; };
@@ -210,6 +228,7 @@
 		F6381BFA1CD26C9C004CA943 /* new_feature_categories.hpp in Headers */ = {isa = PBXBuildFile; fileRef = F6381BF81CD26C9C004CA943 /* new_feature_categories.hpp */; };
 		F6DF5F2D1CD0FC9D00A87154 /* categories_index.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F6DF5F2C1CD0FC9D00A87154 /* categories_index.cpp */; };
 		F6DF5F311CD0FD9A00A87154 /* categories_index.hpp in Headers */ = {isa = PBXBuildFile; fileRef = F6DF5F301CD0FD9A00A87154 /* categories_index.hpp */; };
+		F6F1DABE1F13D8B4006A69B7 /* ftraits.hpp in Headers */ = {isa = PBXBuildFile; fileRef = F6F1DABD1F13D8B4006A69B7 /* ftraits.hpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -263,6 +282,13 @@
 		34AF87D71DBE561400E5E7DC /* libindexer_tests_support.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libindexer_tests_support.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		34AF87E31DBE565F00E5E7DC /* helpers.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = helpers.cpp; sourceTree = "<group>"; };
 		34AF87E41DBE565F00E5E7DC /* helpers.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = helpers.hpp; sourceTree = "<group>"; };
+		3D0AEAF41FBAF9E900AD042B /* test_with_classificator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_with_classificator.cpp; sourceTree = "<group>"; };
+		3D0AEAF51FBAF9E900AD042B /* test_with_custom_mwms.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = test_with_custom_mwms.hpp; sourceTree = "<group>"; };
+		3D0AEAF61FBAF9E900AD042B /* test_with_custom_mwms.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = test_with_custom_mwms.cpp; sourceTree = "<group>"; };
+		3D0AEAF71FBAF9E900AD042B /* test_with_classificator.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = test_with_classificator.hpp; sourceTree = "<group>"; };
+		3D452AF71EE6D9F5009EAB9B /* wheelchair_tests.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wheelchair_tests.cpp; sourceTree = "<group>"; };
+		3D452AF81EE6D9F5009EAB9B /* feature_names_test.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = feature_names_test.cpp; sourceTree = "<group>"; };
+		3D452AF91EE6D9F5009EAB9B /* centers_table_test.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = centers_table_test.cpp; sourceTree = "<group>"; };
 		3D489BA71D3D1F8A0052AA38 /* editable_map_object_test.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = editable_map_object_test.cpp; sourceTree = "<group>"; };
 		3D489BA81D3D1F8A0052AA38 /* features_vector_test.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = features_vector_test.cpp; sourceTree = "<group>"; };
 		3D489BA91D3D1F8A0052AA38 /* string_slice_tests.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = string_slice_tests.cpp; sourceTree = "<group>"; };
@@ -277,8 +303,22 @@
 		3D51BC401D5E4CFA00F1FA8D /* libtess2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtess2.a; path = "../../../omim-xcode-build/Debug/libtess2.a"; sourceTree = "<group>"; };
 		3D51BC441D5E4EBF00F1FA8D /* libsearch_tests_support.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libsearch_tests_support.a; path = "../../../omim-xcode-build/Debug/libsearch_tests_support.a"; sourceTree = "<group>"; };
 		3D74ABBB1EA67C1E0063A898 /* ftypes_mapping.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = ftypes_mapping.hpp; sourceTree = "<group>"; };
+		3D74EF231F8F559D0081202C /* ugc_types_test.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ugc_types_test.cpp; sourceTree = "<group>"; };
 		3D928F651D50F9FE001670E0 /* index_helpers.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = index_helpers.cpp; sourceTree = "<group>"; };
 		3D928F661D50F9FE001670E0 /* index_helpers.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = index_helpers.hpp; sourceTree = "<group>"; };
+		4000905D201F5CAF00963E18 /* cell_value_pair.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = cell_value_pair.hpp; sourceTree = "<group>"; };
+		4000905E201F5CAF00963E18 /* locality_object.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = locality_object.cpp; sourceTree = "<group>"; };
+		4000905F201F5CAF00963E18 /* locality_index_builder.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = locality_index_builder.hpp; sourceTree = "<group>"; };
+		40009060201F5CB000963E18 /* locality_object.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = locality_object.hpp; sourceTree = "<group>"; };
+		40009061201F5CB000963E18 /* locality_index_builder.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = locality_index_builder.cpp; sourceTree = "<group>"; };
+		4095DEB12020AC0000C591A3 /* locality_index.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = locality_index.hpp; sourceTree = "<group>"; };
+		4099F6471FC71429002A7B05 /* fake_feature_ids.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = fake_feature_ids.cpp; sourceTree = "<group>"; };
+		4099F6481FC7142A002A7B05 /* fake_feature_ids.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = fake_feature_ids.hpp; sourceTree = "<group>"; };
+		456B3FB31EDEEB65009B3D1F /* scales_patch.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = scales_patch.hpp; sourceTree = "<group>"; };
+		456E1B141F90E5B6009C32E1 /* cities_boundaries_serdes.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = cities_boundaries_serdes.hpp; sourceTree = "<group>"; };
+		456E1B151F90E5B6009C32E1 /* ftypes_sponsored.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ftypes_sponsored.cpp; sourceTree = "<group>"; };
+		456E1B161F90E5B6009C32E1 /* ftypes_sponsored.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = ftypes_sponsored.hpp; sourceTree = "<group>"; };
+		456E1B171F90E5B7009C32E1 /* city_boundary.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = city_boundary.hpp; sourceTree = "<group>"; };
 		45C108AF1E9CFE3E000FE1F6 /* polyline_point_to_int64_test.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = polyline_point_to_int64_test.cpp; sourceTree = "<group>"; };
 		45C108BC1E9D0067000FE1F6 /* libicu.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libicu.a; path = "/Users/r.kuznetsov/Dev/Projects/omim/xcode/icu/../../../omim-build/xcode/Debug/libicu.a"; sourceTree = "<absolute>"; };
 		45C108BE1E9D008D000FE1F6 /* librouting_common.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = librouting_common.a; path = "/Users/r.kuznetsov/Dev/Projects/omim/xcode/routing_common/../../../omim-build/xcode/Debug/librouting_common.a"; sourceTree = "<absolute>"; };
@@ -339,9 +379,6 @@
 		670C61251AB0661100C38A8C /* indexer_tests.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = indexer_tests.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		670C61581AB0691900C38A8C /* features_offsets_table.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = features_offsets_table.cpp; sourceTree = "<group>"; };
 		670C61591AB0691900C38A8C /* features_offsets_table.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = features_offsets_table.hpp; sourceTree = "<group>"; };
-		670D04A81B0BA8580013A7AC /* feature_loader_101.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = feature_loader_101.cpp; sourceTree = "<group>"; };
-		670D04A91B0BA8580013A7AC /* feature_loader_101.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = feature_loader_101.hpp; sourceTree = "<group>"; };
-		670D04AA1B0BA8580013A7AC /* interval_index_101.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = interval_index_101.hpp; sourceTree = "<group>"; };
 		670EE56A1B60033A001E8064 /* features_vector.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = features_vector.cpp; sourceTree = "<group>"; };
 		670EE56B1B60033A001E8064 /* unique_index.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = unique_index.hpp; sourceTree = "<group>"; };
 		6726C1CF1A49DAAC005EEA39 /* feature_meta.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = feature_meta.cpp; sourceTree = "<group>"; };
@@ -433,6 +470,7 @@
 		F6381BF81CD26C9C004CA943 /* new_feature_categories.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = new_feature_categories.hpp; sourceTree = "<group>"; };
 		F6DF5F2C1CD0FC9D00A87154 /* categories_index.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = categories_index.cpp; sourceTree = "<group>"; };
 		F6DF5F301CD0FD9A00A87154 /* categories_index.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = categories_index.hpp; sourceTree = "<group>"; };
+		F6F1DABD1F13D8B4006A69B7 /* ftraits.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; path = ftraits.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -512,11 +550,23 @@
 		34AF87E21DBE562300E5E7DC /* indexer_tests_support */ = {
 			isa = PBXGroup;
 			children = (
+				3D0AEAF41FBAF9E900AD042B /* test_with_classificator.cpp */,
+				3D0AEAF71FBAF9E900AD042B /* test_with_classificator.hpp */,
+				3D0AEAF61FBAF9E900AD042B /* test_with_custom_mwms.cpp */,
+				3D0AEAF51FBAF9E900AD042B /* test_with_custom_mwms.hpp */,
 				34AF87E31DBE565F00E5E7DC /* helpers.cpp */,
 				34AF87E41DBE565F00E5E7DC /* helpers.hpp */,
 			);
 			name = indexer_tests_support;
 			path = ../../indexer/indexer_tests_support;
+			sourceTree = "<group>";
+		};
+		3D74EEFB1F7CFD2C0081202C /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				670BAAC91D0B0BBB000302DA /* string_slice.hpp */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 		45C108BB1E9D0067000FE1F6 /* Frameworks */ = {
@@ -563,6 +613,10 @@
 		670C60F81AB0657700C38A8C /* indexer_tests */ = {
 			isa = PBXGroup;
 			children = (
+				3D74EF231F8F559D0081202C /* ugc_types_test.cpp */,
+				3D452AF71EE6D9F5009EAB9B /* wheelchair_tests.cpp */,
+				3D452AF81EE6D9F5009EAB9B /* feature_names_test.cpp */,
+				3D452AF91EE6D9F5009EAB9B /* centers_table_test.cpp */,
 				45C108AF1E9CFE3E000FE1F6 /* polyline_point_to_int64_test.cpp */,
 				3D489BF11D4F87740052AA38 /* osm_editor_test.cpp */,
 				3D489BF21D4F87740052AA38 /* osm_editor_test.hpp */,
@@ -601,16 +655,6 @@
 			path = ../../indexer/indexer_tests;
 			sourceTree = "<group>";
 		};
-		670D04A71B0BA8410013A7AC /* old */ = {
-			isa = PBXGroup;
-			children = (
-				670D04A81B0BA8580013A7AC /* feature_loader_101.cpp */,
-				670D04A91B0BA8580013A7AC /* feature_loader_101.hpp */,
-				670D04AA1B0BA8580013A7AC /* interval_index_101.hpp */,
-			);
-			path = old;
-			sourceTree = "<group>";
-		};
 		675340911A3F53CB00A0A8C3 = {
 			isa = PBXGroup;
 			children = (
@@ -623,6 +667,7 @@
 				6753409B1A3F53CB00A0A8C3 /* Products */,
 				3496ABB01DC1FB1500C5DDBA /* Resources */,
 				45C108BB1E9D0067000FE1F6 /* Frameworks */,
+				3D74EEFB1F7CFD2C0081202C /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -639,11 +684,25 @@
 		6753409C1A3F53CB00A0A8C3 /* indexer */ = {
 			isa = PBXGroup;
 			children = (
+				4095DEB12020AC0000C591A3 /* locality_index.hpp */,
+				4000905D201F5CAF00963E18 /* cell_value_pair.hpp */,
+				40009061201F5CB000963E18 /* locality_index_builder.cpp */,
+				4000905F201F5CAF00963E18 /* locality_index_builder.hpp */,
+				4000905E201F5CAF00963E18 /* locality_object.cpp */,
+				40009060201F5CB000963E18 /* locality_object.hpp */,
+				456E1B141F90E5B6009C32E1 /* cities_boundaries_serdes.hpp */,
+				456E1B171F90E5B7009C32E1 /* city_boundary.hpp */,
+				456E1B151F90E5B6009C32E1 /* ftypes_sponsored.cpp */,
+				456E1B161F90E5B6009C32E1 /* ftypes_sponsored.hpp */,
+				F6F1DABD1F13D8B4006A69B7 /* ftraits.hpp */,
+				456B3FB31EDEEB65009B3D1F /* scales_patch.hpp */,
 				3D74ABBB1EA67C1E0063A898 /* ftypes_mapping.hpp */,
 				3D928F651D50F9FE001670E0 /* index_helpers.cpp */,
 				3D928F661D50F9FE001670E0 /* index_helpers.hpp */,
 				34664CEE1D49FEC1003D7096 /* altitude_loader.cpp */,
 				34664CEF1D49FEC1003D7096 /* altitude_loader.hpp */,
+				4099F6471FC71429002A7B05 /* fake_feature_ids.cpp */,
+				4099F6481FC7142A002A7B05 /* fake_feature_ids.hpp */,
 				34664CF01D49FEC1003D7096 /* feature_altitude.hpp */,
 				34664CF11D49FEC1003D7096 /* centers_table.cpp */,
 				34664CF21D49FEC1003D7096 /* centers_table.hpp */,
@@ -680,7 +739,6 @@
 				347F33761C454242009758CC /* trie_builder.hpp */,
 				347F33771C454242009758CC /* trie_reader.hpp */,
 				347F33781C454242009758CC /* trie.hpp */,
-				670D04A71B0BA8410013A7AC /* old */,
 				6758AECD1BB4413000C26E27 /* drules_selector_parser.cpp */,
 				6758AECE1BB4413000C26E27 /* drules_selector_parser.hpp */,
 				6758AECF1BB4413000C26E27 /* drules_selector.cpp */,
@@ -799,6 +857,7 @@
 				34583BC81C88552100F94664 /* cuisines.hpp in Headers */,
 				674125151B4C02F100A3E828 /* map_style.hpp in Headers */,
 				675341291A3F540F00A0A8C3 /* ftypes_matcher.hpp in Headers */,
+				4095DEB22020AC0000C591A3 /* locality_index.hpp in Headers */,
 				675341201A3F540F00A0A8C3 /* feature_processor.hpp in Headers */,
 				675341341A3F540F00A0A8C3 /* interval_index.hpp in Headers */,
 				34664CF51D49FEC1003D7096 /* feature_altitude.hpp in Headers */,
@@ -807,6 +866,7 @@
 				F6381BFA1CD26C9C004CA943 /* new_feature_categories.hpp in Headers */,
 				56C74C231C749E4700B71B9F /* search_delimiters.hpp in Headers */,
 				675341131A3F540F00A0A8C3 /* feature_algo.hpp in Headers */,
+				40009064201F5CB000963E18 /* locality_index_builder.hpp in Headers */,
 				6726C1D21A49DAAC005EEA39 /* feature_meta.hpp in Headers */,
 				347F337F1C454242009758CC /* trie_builder.hpp in Headers */,
 				34664CF71D49FEC1003D7096 /* centers_table.hpp in Headers */,
@@ -815,6 +875,7 @@
 				F6DF5F311CD0FD9A00A87154 /* categories_index.hpp in Headers */,
 				347F337D1C454242009758CC /* succinct_trie_builder.hpp in Headers */,
 				675341381A3F540F00A0A8C3 /* mwm_set.hpp in Headers */,
+				456E1B181F90E5B7009C32E1 /* cities_boundaries_serdes.hpp in Headers */,
 				670EE56D1B60033A001E8064 /* unique_index.hpp in Headers */,
 				6753412B1A3F540F00A0A8C3 /* geometry_coding.hpp in Headers */,
 				675340FF1A3F540F00A0A8C3 /* cell_coverer.hpp in Headers */,
@@ -822,23 +883,29 @@
 				6753410C1A3F540F00A0A8C3 /* drawing_rule_def.hpp in Headers */,
 				675341001A3F540F00A0A8C3 /* cell_id.hpp in Headers */,
 				3D74ABBC1EA67C1E0063A898 /* ftypes_mapping.hpp in Headers */,
-				670D04AD1B0BA8580013A7AC /* interval_index_101.hpp in Headers */,
 				67BC92F51D21476500A4A378 /* string_slice.hpp in Headers */,
+				F6F1DABE1F13D8B4006A69B7 /* ftraits.hpp in Headers */,
 				675341271A3F540F00A0A8C3 /* features_vector.hpp in Headers */,
 				6753413D1A3F540F00A0A8C3 /* scale_index_builder.hpp in Headers */,
 				675341021A3F540F00A0A8C3 /* classificator_loader.hpp in Headers */,
 				3D489BF41D4F87740052AA38 /* osm_editor_test.hpp in Headers */,
+				456B3FB41EDEEB65009B3D1F /* scales_patch.hpp in Headers */,
 				6758AED21BB4413000C26E27 /* drules_selector_parser.hpp in Headers */,
 				670BAACA1D0B0BBB000302DA /* string_slice.hpp in Headers */,
 				6753413F1A3F540F00A0A8C3 /* scale_index.hpp in Headers */,
 				6753410E1A3F540F00A0A8C3 /* drawing_rules.hpp in Headers */,
 				670C615C1AB0691900C38A8C /* features_offsets_table.hpp in Headers */,
+				40009065201F5CB000963E18 /* locality_object.hpp in Headers */,
 				6758AED41BB4413000C26E27 /* drules_selector.hpp in Headers */,
 				675341061A3F540F00A0A8C3 /* coding_params.hpp in Headers */,
+				3D0AEAF91FBAF9E900AD042B /* test_with_custom_mwms.hpp in Headers */,
+				3D0AEAFB1FBAF9E900AD042B /* test_with_classificator.hpp in Headers */,
 				56C74C211C749E4700B71B9F /* edits_migration.hpp in Headers */,
 				6753412F1A3F540F00A0A8C3 /* index_builder.hpp in Headers */,
+				456E1B1A1F90E5B7009C32E1 /* ftypes_sponsored.hpp in Headers */,
 				675341411A3F540F00A0A8C3 /* scales.hpp in Headers */,
 				675341321A3F540F00A0A8C3 /* interval_index_builder.hpp in Headers */,
+				40009062201F5CB000963E18 /* cell_value_pair.hpp in Headers */,
 				347F337C1C454242009758CC /* rank_table.hpp in Headers */,
 				6753414B1A3F540F00A0A8C3 /* tesselator_decl.hpp in Headers */,
 				F61F83071E4B187500B37B7A /* road_shields_parser.hpp in Headers */,
@@ -859,14 +926,15 @@
 				675341261A3F540F00A0A8C3 /* feature.hpp in Headers */,
 				34583BCA1C88552100F94664 /* editable_map_object.hpp in Headers */,
 				34583BCC1C88552100F94664 /* map_object.hpp in Headers */,
+				456E1B1B1F90E5B7009C32E1 /* city_boundary.hpp in Headers */,
 				34664CF41D49FEC1003D7096 /* altitude_loader.hpp in Headers */,
-				670D04AC1B0BA8580013A7AC /* feature_loader_101.hpp in Headers */,
 				67BC92F21D21476500A4A378 /* osm_editor.hpp in Headers */,
 				675341081A3F540F00A0A8C3 /* data_factory.hpp in Headers */,
 				6753410A1A3F540F00A0A8C3 /* data_header.hpp in Headers */,
 				6753411B1A3F540F00A0A8C3 /* feature_impl.hpp in Headers */,
 				34AF87E61DBE565F00E5E7DC /* helpers.hpp in Headers */,
 				675341111A3F540F00A0A8C3 /* drules_struct.pb.h in Headers */,
+				4099F64A1FC7142A002A7B05 /* fake_feature_ids.hpp in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1041,12 +1109,14 @@
 			files = (
 				56C74C241C749E4700B71B9F /* search_string_utils.cpp in Sources */,
 				3D928F671D50F9FE001670E0 /* index_helpers.cpp in Sources */,
+				3D0AEAFA1FBAF9E900AD042B /* test_with_custom_mwms.cpp in Sources */,
 				340DF9D01C1FF04D00B5C7EC /* osm_editor.cpp in Sources */,
+				40009066201F5CB000963E18 /* locality_index_builder.cpp in Sources */,
 				67F183731BD4FCF500AB1840 /* map_style.cpp in Sources */,
-				670D04AB1B0BA8580013A7AC /* feature_loader_101.cpp in Sources */,
 				6758AED31BB4413000C26E27 /* drules_selector.cpp in Sources */,
 				6753411A1A3F540F00A0A8C3 /* feature_impl.cpp in Sources */,
 				56C74C1C1C749E4700B71B9F /* categories_holder_loader.cpp in Sources */,
+				3D74EF241F8F559D0081202C /* ugc_types_test.cpp in Sources */,
 				6753410D1A3F540F00A0A8C3 /* drawing_rules.cpp in Sources */,
 				675341301A3F540F00A0A8C3 /* index.cpp in Sources */,
 				34664CF61D49FEC1003D7096 /* centers_table.cpp in Sources */,
@@ -1054,14 +1124,17 @@
 				6753414D1A3F540F00A0A8C3 /* types_mapping.cpp in Sources */,
 				6753412A1A3F540F00A0A8C3 /* geometry_coding.cpp in Sources */,
 				34583BC71C88552100F94664 /* cuisines.cpp in Sources */,
+				3D452AFA1EE6D9F5009EAB9B /* wheelchair_tests.cpp in Sources */,
 				675341121A3F540F00A0A8C3 /* feature_algo.cpp in Sources */,
 				675341211A3F540F00A0A8C3 /* feature_utils.cpp in Sources */,
+				4099F6491FC7142A002A7B05 /* fake_feature_ids.cpp in Sources */,
 				675341231A3F540F00A0A8C3 /* feature_visibility.cpp in Sources */,
 				56C74C221C749E4700B71B9F /* search_delimiters.cpp in Sources */,
 				347F337B1C454242009758CC /* rank_table.cpp in Sources */,
 				675341161A3F540F00A0A8C3 /* feature_data.cpp in Sources */,
 				34583BC91C88552100F94664 /* editable_map_object.cpp in Sources */,
 				675341031A3F540F00A0A8C3 /* classificator.cpp in Sources */,
+				40009063201F5CB000963E18 /* locality_object.cpp in Sources */,
 				675341401A3F540F00A0A8C3 /* scales.cpp in Sources */,
 				6753411E1A3F540F00A0A8C3 /* feature_loader.cpp in Sources */,
 				675341051A3F540F00A0A8C3 /* coding_params.cpp in Sources */,
@@ -1070,8 +1143,11 @@
 				6753412C1A3F540F00A0A8C3 /* geometry_serialization.cpp in Sources */,
 				F61F83061E4B187500B37B7A /* road_shields_parser.cpp in Sources */,
 				670EE56C1B60033A001E8064 /* features_vector.cpp in Sources */,
+				3D452AFB1EE6D9F5009EAB9B /* feature_names_test.cpp in Sources */,
+				3D452AFC1EE6D9F5009EAB9B /* centers_table_test.cpp in Sources */,
 				34664CF31D49FEC1003D7096 /* altitude_loader.cpp in Sources */,
 				6726C1D11A49DAAC005EEA39 /* feature_meta.cpp in Sources */,
+				3D0AEAF81FBAF9E900AD042B /* test_with_classificator.cpp in Sources */,
 				6753411C1A3F540F00A0A8C3 /* feature_loader_base.cpp in Sources */,
 				67BC92F41D21476500A4A378 /* string_slice.cpp in Sources */,
 				675341071A3F540F00A0A8C3 /* data_factory.cpp in Sources */,
@@ -1079,6 +1155,7 @@
 				6753412E1A3F540F00A0A8C3 /* index_builder.cpp in Sources */,
 				675341011A3F540F00A0A8C3 /* classificator_loader.cpp in Sources */,
 				F6381BF91CD26C9C004CA943 /* new_feature_categories.cpp in Sources */,
+				456E1B191F90E5B7009C32E1 /* ftypes_sponsored.cpp in Sources */,
 				F6DF5F2D1CD0FC9D00A87154 /* categories_index.cpp in Sources */,
 				674125131B4C02F100A3E828 /* map_style_reader.cpp in Sources */,
 				675341141A3F540F00A0A8C3 /* feature_covering.cpp in Sources */,
@@ -1142,7 +1219,7 @@
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(OMIM_ROOT)/3party/protobuf/src",
+					"$(OMIM_ROOT)/3party/protobuf/protobuf/src",
 				);
 			};
 			name = Debug;
@@ -1153,7 +1230,7 @@
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(OMIM_ROOT)/3party/protobuf/src",
+					"$(OMIM_ROOT)/3party/protobuf/protobuf/src",
 				);
 			};
 			name = Release;
@@ -1174,6 +1251,44 @@
 			};
 			name = Release;
 		};
+		A8E541551F9FBDA300A1B8FA /* Production Full */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 34AF87D21DBE540700E5E7DC /* common-release.xcconfig */;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(OMIM_ROOT)/3party/protobuf/protobuf/src",
+				);
+			};
+			name = "Production Full";
+		};
+		A8E541561F9FBDA300A1B8FA /* Production Full */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "Production Full";
+		};
+		A8E541571F9FBDA300A1B8FA /* Production Full */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "Production Full";
+		};
+		A8E541581F9FBDA300A1B8FA /* Production Full */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INFOPLIST_FILE = "$(OMIM_ROOT)/iphone/Maps/MAPSME.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "maps.me.indexer-tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "Production Full";
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1182,6 +1297,7 @@
 			buildConfigurations = (
 				34AF87E01DBE561400E5E7DC /* Debug */,
 				34AF87E11DBE561400E5E7DC /* Release */,
+				A8E541571F9FBDA300A1B8FA /* Production Full */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1191,6 +1307,7 @@
 			buildConfigurations = (
 				670C612A1AB0661100C38A8C /* Debug */,
 				670C612B1AB0661100C38A8C /* Release */,
+				A8E541581F9FBDA300A1B8FA /* Production Full */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1200,6 +1317,7 @@
 			buildConfigurations = (
 				675340A31A3F53CB00A0A8C3 /* Debug */,
 				675340A41A3F53CB00A0A8C3 /* Release */,
+				A8E541551F9FBDA300A1B8FA /* Production Full */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1209,6 +1327,7 @@
 			buildConfigurations = (
 				675340A61A3F53CB00A0A8C3 /* Debug */,
 				675340A71A3F53CB00A0A8C3 /* Release */,
+				A8E541561F9FBDA300A1B8FA /* Production Full */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

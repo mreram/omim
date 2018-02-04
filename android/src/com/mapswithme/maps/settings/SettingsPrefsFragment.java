@@ -13,6 +13,7 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.preference.ListPreference;
 import android.support.v7.preference.Preference;
+import android.support.v7.preference.PreferenceCategory;
 import android.support.v7.preference.PreferenceScreen;
 import android.support.v7.preference.TwoStatePreference;
 import android.text.Spannable;
@@ -35,6 +36,7 @@ import com.mapswithme.maps.sound.LanguageData;
 import com.mapswithme.maps.sound.TtsPlayer;
 import com.mapswithme.util.Config;
 import com.mapswithme.util.NetworkPolicy;
+import com.mapswithme.util.SharedPropertiesUtils;
 import com.mapswithme.util.ThemeSwitcher;
 import com.mapswithme.util.UiUtils;
 import com.mapswithme.util.concurrency.UiThread;
@@ -87,12 +89,16 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
     if (singleStorageOnly())
     {
       if (old != null)
-        getPreferenceScreen().removePreference(old);
+      {
+        removePreference(getString(R.string.pref_settings_general), old);
+      }
     }
     else
     {
       if (old == null && mStoragePref != null)
+      {
         getPreferenceScreen().addPreference(mStoragePref);
+      }
     }
   }
 
@@ -129,7 +135,7 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
       if (mPrefEnabled != null)
         mPrefEnabled.setTitle(R.string.on);
       if (mLangInfoLink != null)
-        getPreferenceScreen().removePreference(mLangInfoLink);
+        removePreference(getString(R.string.pref_navigation), mLangInfoLink);
 
       if (mCurrentLanguage != null && mCurrentLanguage.downloaded)
       {
@@ -220,7 +226,7 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
     mLangInfo.setSummary(enabled ? R.string.prefs_languages_information
                                  : R.string.prefs_languages_information_off);
     if (enabled)
-      getPreferenceScreen().removePreference(mLangInfoLink);
+      removePreference(getString(R.string.pref_navigation), mLangInfoLink);
     else if (isOnTtsScreen())
       getPreferenceScreen().addPreference(mLangInfoLink);
 
@@ -287,6 +293,7 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
     initMapStylePrefsCallbacks();
     initAutoDownloadPrefsCallbacks();
     initLargeFontSizePrefsCallbacks();
+    initTransliterationPrefsCallbacks();
     init3dModePrefsCallbacks();
     initPerspectivePrefsCallbacks();
     initTrackRecordPrefsCallbacks();
@@ -294,11 +301,9 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
     initPlayServicesPrefsCallbacks();
     initAutoZoomPrefsCallbacks();
     initSimplifiedTrafficColorsPrefsCallbacks();
-
-    if (!MytargetHelper.isShowcaseSwitchedOnServer())
-      getPreferenceScreen().removePreference(findPreference(getString(R.string.pref_showcase_switched_on)));
-
+    initDisplayShowcasePrefs();
     initLoggingEnabledPrefsCallbacks();
+    initEmulationBadStorage();
     initUseMobileDataPrefsCallbacks();
 
     updateTts();
@@ -350,6 +355,18 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
     return super.onPreferenceTreeClick(preference);
   }
 
+  private void initDisplayShowcasePrefs()
+  {
+    if (MytargetHelper.isShowcaseSwitchedOnServer())
+      return;
+
+    Preference pref = findPreference(getString(R.string.pref_showcase_switched_on));
+    if (pref == null)
+      return;
+
+    removePreference(getString(R.string.pref_settings_general), pref);
+  }
+
   private void initLangInfoLink()
   {
     if (mLangInfoLink != null)
@@ -370,7 +387,7 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
           return false;
         }
       });
-      mPreferenceScreen.removePreference(mLangInfoLink);
+      removePreference(getString(R.string.pref_navigation), mLangInfoLink);
     }
   }
 
@@ -410,6 +427,28 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
         boolean newVal = (Boolean) newValue;
         if (oldVal != newVal)
           Config.setLargeFontsSize(newVal);
+
+        return true;
+      }
+    });
+  }
+
+  private void initTransliterationPrefsCallbacks()
+  {
+    Preference pref = findPreference(getString(R.string.pref_transliteration));
+    if (pref == null)
+      return;
+
+    ((TwoStatePreference)pref).setChecked(Config.isTransliteration());
+    pref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener()
+    {
+      @Override
+      public boolean onPreferenceChange(Preference preference, Object newValue)
+      {
+        boolean oldVal = Config.isTransliteration();
+        boolean newVal = (Boolean) newValue;
+        if (oldVal != newVal)
+          Config.setTransliteration(newVal);
 
         return true;
       }
@@ -479,7 +518,7 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
     if (!MwmApplication.prefs().getBoolean(SearchFragment.PREFS_SHOW_ENABLE_LOGGING_SETTING,
                                            BuildConfig.BUILD_TYPE.equals("beta")))
     {
-      getPreferenceScreen().removePreference(pref);
+      removePreference(getString(R.string.pref_settings_general), pref);
     }
     else
     {
@@ -500,6 +539,16 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
         }
       });
     }
+  }
+
+  private void initEmulationBadStorage()
+  {
+    Preference pref = findPreference(getString(R.string.pref_emulate_bad_external_storage));
+    if (pref == null)
+      return;
+
+    if (!SharedPropertiesUtils.shouldShowEmulateBadStorageSetting())
+      removePreference(getString(R.string.pref_settings_general), pref);
   }
 
   private void initAutoZoomPrefsCallbacks()
@@ -528,7 +577,9 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
       return;
 
     if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(MwmApplication.get()) != ConnectionResult.SUCCESS)
-      getPreferenceScreen().removePreference(pref);
+    {
+      removePreference(getString(R.string.pref_settings_general), pref);
+    }
     else
     {
       ((TwoStatePreference) pref).setChecked(Config.useGoogleServices());
@@ -556,7 +607,7 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
     if (pref == null)
       return;
 
-    ((TwoStatePreference)pref).setChecked(Config.isStatisticsEnabled());
+    ((TwoStatePreference)pref).setChecked(SharedPropertiesUtils.isStatisticsEnabled());
     pref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener()
     {
       @Override
@@ -797,6 +848,15 @@ public class SettingsPrefsFragment extends BaseXmlSettingsFragment
         return true;
       }
     });
+  }
+
+  private void removePreference(@NonNull String categoryKey, @NonNull Preference preference)
+  {
+    PreferenceCategory category = (PreferenceCategory) findPreference(categoryKey);
+    if (category == null)
+      return;
+
+    category.removePreference(preference);
   }
 
   @Override

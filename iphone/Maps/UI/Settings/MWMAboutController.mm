@@ -4,12 +4,9 @@
 #import "Statistics.h"
 #import "SwiftBridge.h"
 #import "WebViewController.h"
-
 #import "3party/Alohalytics/src/alohalytics_objc.h"
 
 #include "Framework.h"
-
-#include "platform/platform.hpp"
 
 extern NSString * const kAlohalyticsTapEventKey;
 
@@ -36,7 +33,7 @@ extern NSString * const kAlohalyticsTapEventKey;
   [super viewDidLoad];
   self.title = L(@"about_menu_title");
 
-  [[NSBundle mainBundle] loadNibNamed:@"MWMAboutControllerHeader" owner:self options:nil];
+  [NSBundle.mainBundle loadNibNamed:@"MWMAboutControllerHeader" owner:self options:nil];
   self.tableView.tableHeaderView = self.headerView;
 
   AppInfo * appInfo = [AppInfo sharedInfo];
@@ -82,7 +79,7 @@ extern NSString * const kAlohalyticsTapEventKey;
   {
     [Statistics logEvent:kStatSettingsOpenSection withParameters:@{kStatName : kStatRate}];
     [Alohalytics logEvent:kAlohalyticsTapEventKey withValue:@"rate"];
-    [[UIApplication sharedApplication] rateVersionFrom:@"rate_menu_item"];
+    [UIApplication.sharedApplication rateVersionFrom:@"rate_menu_item"];
   }
   else if (cell == self.copyrightCell)
   {

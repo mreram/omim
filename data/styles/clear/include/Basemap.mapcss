@@ -84,6 +84,7 @@ area[landuse=field],
 {z-index: 41;}
 
 area[natural=wetland],
+area[leisure=marina],
 line[waterway=stream][intermittent=yes]
 {z-index: 42;}
 
@@ -344,6 +345,7 @@ area|z0-[waterway=dock],
 area|z0-[waterway=riverbank],
 area|z10-[natural=bay],
 area|z11-[natural=wetland],
+area|z11-[leisure=marina],
 area|z12-[landuse=basin],
 area|z12-[landuse=reservoir],
 area|z13-[leisure=swimming_pool],
@@ -375,6 +377,7 @@ area|z16-[amenity=fountain],
 {fill-color: @water;}
 
 area|z11-[natural=wetland],
+area|z11-[leisure=marina],
 {fill-color: @wetland;}
 
 /* 6.2 Line water(river,canal etc.) */
@@ -564,22 +567,15 @@ area|z15-[amenity=parking]
 
 /* 8.BUILDINGS */
 
-area|z12-[man_made=pier],
-area|z12-[man_made=breakwater],
-line|z14-[man_made=pier],
-line|z14-[man_made=breakwater],
-line|z14-[man_made=cutline]
-{fill-position: background;	fill-opacity: 1;}
-
 /* 8.1 Pier */
 area|z12-[man_made=pier],
 area|z12-[man_made=breakwater],
- {fill-color: @background;casing-color: @background;}
+{fill-position: background; fill-opacity: 1; fill-color: @background;casing-color: @background;}
 
 line|z14-[man_made=pier],
 line|z14-[man_made=breakwater],
 line|z14-[man_made=cutline]
-{casing-width: 2;casing-color: @background;fill-color: @background;}
+{width: 2;color: @background;opacity: 1;}
 
 /* 8.2 Building */
 

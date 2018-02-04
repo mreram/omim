@@ -1,8 +1,8 @@
 package com.mapswithme.maps.search;
 
 import android.content.res.Resources;
-import android.content.res.TypedArray;
 import android.support.annotation.DrawableRes;
+import android.support.annotation.NonNull;
 import android.support.annotation.StringRes;
 import android.support.v4.app.Fragment;
 import android.support.v7.widget.RecyclerView;
@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import com.mapswithme.maps.R;
+import com.mapswithme.maps.widget.placepage.Sponsored;
 import com.mapswithme.util.ThemeUtils;
 import com.mapswithme.util.statistics.Statistics;
 
@@ -22,6 +23,8 @@ class CategoriesAdapter extends RecyclerView.Adapter<CategoriesAdapter.ViewHolde
 
   private final LayoutInflater mInflater;
   private final Resources mResources;
+
+  static final String LUGGAGE_CATEGORY = "luggagehero";
 
   interface OnCategorySelectedListener
   {
@@ -47,7 +50,19 @@ class CategoriesAdapter extends RecyclerView.Adapter<CategoriesAdapter.ViewHolde
 
       mCategoryResIds[i] = resources.getIdentifier(key, "string", packageName);
       if (mCategoryResIds[i] == 0)
-        throw new IllegalStateException("Can't get string resource id for category:" + key);
+      {
+        if (key.equals(LUGGAGE_CATEGORY))
+        {
+          Statistics.INSTANCE.trackSponsoredEventForCustomProvider(
+              Statistics.EventName.SEARCH_SPONSOR_CATEGORY_SHOWN,
+              Statistics.ParamValue.LUGGAGE_HERO);
+          mCategoryResIds[i] = R.string.luggage_storage;
+        }
+        else
+        {
+          throw new IllegalStateException("Can't get string resource id for category:" + key);
+        }
+      }
 
       String iconId = "ic_category_" + key;
       if (isNightTheme)
@@ -64,10 +79,25 @@ class CategoriesAdapter extends RecyclerView.Adapter<CategoriesAdapter.ViewHolde
   }
 
   @Override
+  public int getItemViewType(int position)
+  {
+    if (mCategoryResIds[position] == R.string.luggage_storage)
+      return R.layout.item_search_category_luggage;
+    return R.layout.item_search_category;
+  }
+
+  @Override
   public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType)
   {
-    final View view = mInflater.inflate(R.layout.item_search_category, parent, false);
-    return new ViewHolder(view);
+    final View view;
+    if (viewType == R.layout.item_search_category_luggage)
+    {
+      view = mInflater.inflate(R.layout.item_search_category_luggage, parent, false);
+      return new ViewHolder(view, (TextView) view.findViewById(R.id.tv__category));
+    }
+
+    view = mInflater.inflate(R.layout.item_search_category, parent, false);
+    return new ViewHolder(view, (TextView)view);
   }
 
   @Override
@@ -84,18 +114,21 @@ class CategoriesAdapter extends RecyclerView.Adapter<CategoriesAdapter.ViewHolde
 
   private String getSuggestionFromCategory(int resId)
   {
+    if (resId == R.string.luggage_storage)
+      return LUGGAGE_CATEGORY + ' ';
     return mResources.getString(resId) + ' ';
   }
 
   public class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener
   {
+    @NonNull
     private final TextView mTitle;
 
-    ViewHolder(View v)
+    ViewHolder(@NonNull View v, @NonNull TextView tv)
     {
       super(v);
       v.setOnClickListener(this);
-      mTitle = (TextView) v;
+      mTitle = tv;
     }
 
     @Override

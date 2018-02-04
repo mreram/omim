@@ -6,6 +6,7 @@
 @import("../include/Roads.mapcss");
 @import("../include/Roads_label.mapcss");
 @import("../include/Icons.mapcss");
+@import("../include/Subways.mapcss");
 
 
 canvas
@@ -35,6 +36,18 @@ colors
   RoutePedestrian-opacity: 0.8;
   RouteBicycle-color: #9C27B0;
   RouteBicycle-opacity: 0.8;
+  RoutePreview-color: #000000;
+  RoutePreview-opacity: 0.3;
+  RouteMaskCar-color: #000000;
+  RouteMaskCar-opacity: 0.3;
+  RouteArrowsMaskCar-color: #033B80;
+  RouteArrowsMaskCar-opacity: 0.2;
+  RouteMaskBicycle-color: #000000;
+  RouteMaskBicycle-opacity: 0.5;
+  RouteArrowsMaskBicycle-color: #9C27B0;
+  RouteArrowsMaskBicycle-opacity: 0.2;
+  RouteMaskPedestrian-color: #000000;
+  RouteMaskPedestrian-opacity: 0.5;
   Arrow3D-color: #50AAFF;
   Arrow3DObsolete-color: #82AAC8;
   Arrow3DObsolete-opacity: 0.72;
@@ -68,4 +81,15 @@ colors
   PoiHotelTextOutline-opacity: 0.6;
   PoiDeletedMask-color: #FFFFFF;
   PoiDeletedMask-opacity: 0.3;
+  DefaultTrackColor-color: #1E96F0;
+  RouteMarkPrimaryText-color: #000000;
+  RouteMarkPrimaryTextOutline-color: #FFFFFF;
+  RouteMarkSecondaryText-color: #000000;
+  RouteMarkSecondaryTextOutline-color: #FFFFFF;
+  LocalAdsPrimaryText-color: #000000;
+  LocalAdsPrimaryTextOutline-color: #FFFFFF;
+  LocalAdsSecondaryText-color: #000000;
+  LocalAdsSecondaryTextOutline-color: #FFFFFF;
+  TransitBackground-color: #FFFFFF;
+  TransitBackground-opacity: 0.4;
 }

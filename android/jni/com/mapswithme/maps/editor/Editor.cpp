@@ -575,7 +575,7 @@ Java_com_mapswithme_maps_editor_Editor_nativeIsZipcodeValid(JNIEnv * env, jclass
 JNIEXPORT jboolean JNICALL
 Java_com_mapswithme_maps_editor_Editor_nativeIsPhoneValid(JNIEnv * env, jclass clazz, jstring phone)
 {
-  return osm::EditableMapObject::ValidatePhone(jni::ToNativeString(env, phone));
+  return osm::EditableMapObject::ValidatePhoneList(jni::ToNativeString(env, phone));
 }
 
 // static boolean nativeIsWebsiteValid(String website)
@@ -590,6 +590,12 @@ JNIEXPORT jboolean JNICALL
 Java_com_mapswithme_maps_editor_Editor_nativeIsEmailValid(JNIEnv * env, jclass clazz, jstring email)
 {
   return osm::EditableMapObject::ValidateEmail(jni::ToNativeString(env, email));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_mapswithme_maps_editor_Editor_nativeIsNameValid(JNIEnv * env, jclass clazz, jstring name)
+{
+  return osm::EditableMapObject::ValidateName(jni::ToNativeString(env, name));
 }
 
 JNIEXPORT jstring JNICALL

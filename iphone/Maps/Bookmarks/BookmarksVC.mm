@@ -2,28 +2,18 @@
 #import "CircleView.h"
 #import "ColorPickerView.h"
 #import "MWMBookmarkNameCell.h"
-#import "MWMCommon.h"
 #import "MWMLocationHelpers.h"
-#import "MWMLocationManager.h"
 #import "MWMLocationObserver.h"
 #import "MWMMailViewController.h"
-#import "MWMMapViewControlsManager.h"
-#import "MapViewController.h"
-#import "MapsAppDelegate.h"
-#import "Statistics.h"
+#import "MWMSearchManager.h"
 #import "SwiftBridge.h"
 
 #include "Framework.h"
-
-#include "platform/measurement_utils.hpp"
 
 #include "geometry/distance_on_sphere.hpp"
 
 #include "coding/zip_creator.hpp"
 #include "coding/internal/file_data.hpp"
-
-#include <fstream>
-#include <vector>
 
 #define PINDIAMETER 18
 
@@ -85,10 +75,8 @@ extern NSString * const kBookmarkDeletedNotification = @"BookmarkDeletedNotifica
   [Statistics logEvent:kStatEventName(kStatBookmarks, kStatToggleVisibility)
                    withParameters:@{kStatValue : sender.on ? kStatVisible : kStatHidden}];
   BookmarkCategory * cat = GetFramework().GetBmCategory(m_categoryIndex);
-  {
-    BookmarkCategory::Guard guard(*cat);
-    guard.m_controller.SetIsVisible(sender.on);
-  }
+  cat->SetIsVisible(sender.on);
+  cat->NotifyChanges();
   cat->SaveToKMLFile();
 }
 
@@ -239,8 +227,7 @@ extern NSString * const kBookmarkDeletedNotification = @"BookmarkDeletedNotifica
       {
         [Statistics logEvent:kStatEventName(kStatBookmarks, kStatShowOnMap)];
         // Same as "Close".
-        MapViewController * mapVC = self.navigationController.viewControllers.firstObject;
-        mapVC.controlsManager.searchHidden = YES;
+        [MWMSearchManager manager].state = MWMSearchManagerStateHidden;
         f.ShowBookmark({static_cast<size_t>(indexPath.row), m_categoryIndex});
         [self.navigationController popToRootViewControllerAnimated:YES];
       }
@@ -260,12 +247,12 @@ extern NSString * const kBookmarkDeletedNotification = @"BookmarkDeletedNotifica
       NSMutableString * kmzFile = [NSMutableString stringWithString:filePath];
       [kmzFile replaceCharactersInRange:NSMakeRange([filePath length] - 1, 1) withString:@"z"];
 
-      if (CreateZipFromPathDeflatedAndDefaultCompression([filePath UTF8String], [kmzFile UTF8String]))
+      if (CreateZipFromPathDeflatedAndDefaultCompression(filePath.UTF8String, kmzFile.UTF8String))
         [self sendBookmarksWithExtension:@".kmz" andType:@"application/vnd.google-earth.kmz" andFile:kmzFile andCategory:catName];
       else
         [self sendBookmarksWithExtension:@".kml" andType:@"application/vnd.google-earth.kml+xml" andFile:filePath andCategory:catName];
 
-      (void)my::DeleteFileX([kmzFile UTF8String]);
+      (void)my::DeleteFileX(kmzFile.UTF8String);
     }
   }
 }
@@ -301,14 +288,15 @@ extern NSString * const kBookmarkDeletedNotification = @"BookmarkDeletedNotifica
         {
           auto bac = BookmarkAndCategory(static_cast<size_t>(indexPath.row), m_categoryIndex);
           NSValue * value = [NSValue valueWithBytes:&bac objCType:@encode(BookmarkAndCategory)];
-          [[NSNotificationCenter defaultCenter] postNotificationName:kBookmarkDeletedNotification object:value];
-          BookmarkCategory::Guard guard(*cat);
-          guard.m_controller.DeleteUserMark(indexPath.row);
+          [NSNotificationCenter.defaultCenter postNotificationName:kBookmarkDeletedNotification
+                                                            object:value];
+          cat->DeleteUserMark(indexPath.row);
           [NSNotificationCenter.defaultCenter postNotificationName:kBookmarksChangedNotification
                                                             object:nil
                                                           userInfo:nil];
         }
       }
+      cat->NotifyChanges();
       cat->SaveToKMLFile();
       size_t previousNumberOfSections  = m_numberOfSections;
       [self calculateSections];
@@ -374,7 +362,7 @@ extern NSString * const kBookmarkDeletedNotification = @"BookmarkDeletedNotifica
 {
   // Update edited category name
   BookmarkCategory * cat = GetFramework().GetBmCategory(m_categoryIndex);
-  char const * newCharName = [newName UTF8String];
+  char const * newCharName = newName.UTF8String;
   if (cat->GetName() != newCharName)
   {
     cat->SetName(newCharName);
@@ -415,15 +403,37 @@ extern NSString * const kBookmarkDeletedNotification = @"BookmarkDeletedNotifica
   [mailVC setSubject:L(@"share_bookmarks_email_subject")];
 
   std::ifstream ifs(filePath.UTF8String);
-  ifs.seekg(ifs.end);
-  auto const size = ifs.tellg();
-  std::vector<char> data(size);
-  ifs.seekg(ifs.beg);
-  ifs.read(data.data(), size);
-  ifs.close();
+  std::vector<char> data;
+  if (ifs.is_open())
+  {
+    ifs.seekg(0, ifs.end);
+    auto const size = ifs.tellg();
+    if (size == -1)
+    {
+      ASSERT(false, ("Attachment file seek error."));
+    }
+    else if (size == 0)
+    {
+      ASSERT(false, ("Attachment file is empty."));
+    }
+    else
+    {
+      data.resize(size);
+      ifs.seekg(0);
+      ifs.read(data.data(), size);
+      ifs.close();
+    }
+  }
+  else
+  {
+    ASSERT(false, ("Attachment file is missing."));
+  }
 
-  auto myData = [[NSData alloc] initWithBytes:data.data() length:size];
-  [mailVC addAttachmentData:myData mimeType:mimeType fileName:[NSString stringWithFormat:@"%@%@", catName, fileExtension]];
+  if (!data.empty())
+  {
+    auto myData = [[NSData alloc] initWithBytes:data.data() length:data.size()];
+    [mailVC addAttachmentData:myData mimeType:mimeType fileName:[NSString stringWithFormat:@"%@%@", catName, fileExtension]];
+  }
   [mailVC setMessageBody:[NSString stringWithFormat:L(@"share_bookmarks_email_body"), catName] isHTML:NO];
   [self presentViewController:mailVC animated:YES completion:nil];
 }

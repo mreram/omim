@@ -1,16 +1,8 @@
 #import "MWMButton.h"
+#import "MWMCircularProgressState.h"
 #import "UIImageView+Coloring.h"
 
 #include "std/vector.hpp"
-
-typedef NS_ENUM(NSInteger, MWMCircularProgressState) {
-  MWMCircularProgressStateNormal,
-  MWMCircularProgressStateSelected,
-  MWMCircularProgressStateProgress,
-  MWMCircularProgressStateSpinner,
-  MWMCircularProgressStateFailed,
-  MWMCircularProgressStateCompleted
-};
 
 using MWMCircularProgressStateVec = vector<MWMCircularProgressState>;
 
@@ -32,7 +24,8 @@ using MWMCircularProgressStateVec = vector<MWMCircularProgressState>;
 
 - (void)setSpinnerColoring:(MWMImageColoring)coloring;
 - (void)setSpinnerBackgroundColor:(nonnull UIColor *)backgroundColor;
-- (void)setImageName:(nonnull NSString *)imageName forStates:(MWMCircularProgressStateVec const &)states;
+- (void)setImageName:(nullable NSString *)imageName
+           forStates:(MWMCircularProgressStateVec const &)states;
 - (void)setColor:(nonnull UIColor *)color forStates:(MWMCircularProgressStateVec const &)states;
 - (void)setColoring:(MWMButtonColoring)coloring
           forStates:(MWMCircularProgressStateVec const &)states;

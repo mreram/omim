@@ -1,5 +1,5 @@
-#include "../core/jni_helper.hpp"
-#include "../maps/Framework.hpp"
+#include "com/mapswithme/core/jni_helper.hpp"
+#include "com/mapswithme/maps/Framework.hpp"
 #include "platform/settings.hpp"
 
 namespace
@@ -101,5 +101,19 @@ extern "C"
     {
       frm()->SaveLargeFontsSize(value);
       frm()->SetLargeFontsSize(value);
+    }
+
+    JNIEXPORT jboolean JNICALL
+    Java_com_mapswithme_util_Config_nativeGetTransliteration(JNIEnv * env, jclass thiz)
+    {
+      return frm()->LoadTransliteration();
+    }
+
+    JNIEXPORT void JNICALL
+    Java_com_mapswithme_util_Config_nativeSetTransliteration(JNIEnv * env, jclass thiz,
+                                                             jboolean value)
+    {
+      frm()->SaveTransliteration(value);
+      frm()->AllowTransliteration(value);
     }
 } // extern "C"

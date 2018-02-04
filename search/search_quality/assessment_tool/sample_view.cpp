@@ -1,16 +1,19 @@
 #include "search/search_quality/assessment_tool/sample_view.hpp"
 
+#include "qt/qt_common/helpers.hpp"
 #include "qt/qt_common/spinner.hpp"
 
 #include "map/bookmark_manager.hpp"
 #include "map/framework.hpp"
-#include "map/user_mark.hpp"
+#include "map/search_mark.hpp"
 
 #include "search/result.hpp"
 #include "search/search_quality/assessment_tool/helpers.hpp"
 #include "search/search_quality/assessment_tool/result_view.hpp"
 #include "search/search_quality/assessment_tool/results_view.hpp"
 #include "search/search_quality/sample.hpp"
+
+#include "platform/location.hpp"
 
 #include <QtGui/QStandardItem>
 #include <QtGui/QStandardItemModel>
@@ -150,7 +153,8 @@ SampleView::SampleView(QWidget * parent, Framework & framework)
   Clear();
 }
 
-void SampleView::SetContents(search::Sample const & sample, bool positionAvailable)
+void SampleView::SetContents(search::Sample const & sample, bool positionAvailable,
+                             m2::PointD const & position)
 {
   if (!sample.m_query.empty())
   {
@@ -163,7 +167,6 @@ void SampleView::SetContents(search::Sample const & sample, bool positionAvailab
     m_langs->show();
   }
   m_showViewport->setEnabled(true);
-  m_showPosition->setEnabled(positionAvailable);
 
   m_relatedQueries->clear();
   for (auto const & query : sample.m_relatedQueries)
@@ -172,13 +175,43 @@ void SampleView::SetContents(search::Sample const & sample, bool positionAvailab
     m_relatedQueriesBox->show();
 
   ClearAllResults();
+  m_positionAvailable = positionAvailable;
+  if (m_positionAvailable)
+    ShowUserPosition(position);
+  else
+    HideUserPosition();
 }
 
-void SampleView::OnSearchStarted() { m_spinner->Show(); }
+void SampleView::OnSearchStarted()
+{
+  m_spinner->Show();
+  m_showPosition->setEnabled(false);
+}
 
-void SampleView::OnSearchCompleted() { m_spinner->Hide(); }
+void SampleView::OnSearchCompleted()
+{
+  m_spinner->Hide();
+  auto const resultsAvailable = m_foundResults->HasResultsWithPoints();
+  if (m_positionAvailable)
+  {
+    if (resultsAvailable)
+      m_showPosition->setText(tr("Show position and top results"));
+    else
+      m_showPosition->setText(tr("Show position"));
+    m_showPosition->setEnabled(true);
+  }
+  else if (resultsAvailable)
+  {
+    m_showPosition->setText(tr("Show results"));
+    m_showPosition->setEnabled(true);
+  }
+  else
+  {
+    m_showPosition->setEnabled(false);
+  }
+}
 
-void SampleView::ShowFoundResults(search::Results::ConstIter begin, search::Results::ConstIter end)
+void SampleView::AddFoundResults(search::Results::ConstIter begin, search::Results::ConstIter end)
 {
   for (auto it = begin; it != end; ++it)
     m_foundResults->Add(*it /* result */);
@@ -189,10 +222,12 @@ void SampleView::ShowNonFoundResults(std::vector<search::Sample::Result> const &
 {
   CHECK_EQUAL(results.size(), entries.size(), ());
 
-  auto & bookmarkManager = m_framework.GetBookmarkManager();
-  UserMarkControllerGuard guard(bookmarkManager, UserMarkType::SEARCH_MARK);
-  guard.m_controller.SetIsVisible(true);
-  guard.m_controller.SetIsDrawable(true);
+  auto & controller = m_framework.GetBookmarkManager().GetUserMarksController(UserMark::Type::SEARCH);
+  controller.SetIsVisible(true);
+  controller.SetIsDrawable(true);
+  controller.NotifyChanges();
+
+  m_nonFoundResults->Clear();
 
   bool allDeleted = true;
   for (size_t i = 0; i < results.size(); ++i)
@@ -207,7 +242,7 @@ void SampleView::ShowNonFoundResults(std::vector<search::Sample::Result> const &
 
 void SampleView::ShowFoundResultsMarks(search::Results::ConstIter begin, search::Results::ConstIter end)
 {
-  m_framework.FillSearchResultsMarks(begin, end);
+  m_framework.FillSearchResultsMarks(false /* clear */, begin, end);
 }
 
 void SampleView::ShowNonFoundResultsMarks(std::vector<search::Sample::Result> const & results,
@@ -216,10 +251,9 @@ void SampleView::ShowNonFoundResultsMarks(std::vector<search::Sample::Result> co
 {
   CHECK_EQUAL(results.size(), entries.size(), ());
 
-  auto & bookmarkManager = m_framework.GetBookmarkManager();
-  UserMarkControllerGuard guard(bookmarkManager, UserMarkType::SEARCH_MARK);
-  guard.m_controller.SetIsVisible(true);
-  guard.m_controller.SetIsDrawable(true);
+  auto & controller = m_framework.GetBookmarkManager().GetUserMarksController(UserMark::Type::SEARCH);
+  controller.SetIsVisible(true);
+  controller.SetIsDrawable(true);
 
   for (size_t i = 0; i < results.size(); ++i)
   {
@@ -229,9 +263,10 @@ void SampleView::ShowNonFoundResultsMarks(std::vector<search::Sample::Result> co
       continue;
 
     SearchMarkPoint * mark =
-        static_cast<SearchMarkPoint *>(guard.m_controller.CreateUserMark(result.m_pos));
-    mark->SetCustomSymbol("non-found-search-result");
+        static_cast<SearchMarkPoint *>(controller.CreateUserMark(result.m_pos));
+    mark->SetMarkType(SearchMarkType::NotFound);
   }
+  controller.NotifyChanges();
 }
 
 void SampleView::ClearSearchResultMarks() { m_framework.ClearSearchResultsMarks(); }
@@ -262,6 +297,8 @@ void SampleView::Clear()
   m_relatedQueriesBox->hide();
 
   ClearAllResults();
+  HideUserPosition();
+  m_positionAvailable = false;
   OnSearchCompleted();
 }
 
@@ -278,7 +315,17 @@ void SampleView::SetEdits(ResultsView & results, Edits & edits)
   size_t const numRelevances = edits.GetRelevances().size();
   CHECK_EQUAL(results.Size(), numRelevances, ());
   for (size_t i = 0; i < numRelevances; ++i)
-    results.Get(i).SetEditor(Edits::RelevanceEditor(edits, i));
+    results.Get(i).SetEditor(Edits::Editor(edits, i));
 }
 
 void SampleView::OnRemoveNonFoundResult(int row) { m_nonFoundResultsEdits->Delete(row); }
+
+void SampleView::ShowUserPosition(m2::PointD const & position)
+{
+  m_framework.OnLocationUpdate(qt::common::MakeGpsInfo(position));
+}
+
+void SampleView::HideUserPosition()
+{
+  m_framework.OnLocationError(location::EGPSIsOff);
+}

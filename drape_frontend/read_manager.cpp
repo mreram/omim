@@ -1,5 +1,6 @@
 #include "drape_frontend/read_manager.hpp"
 #include "drape_frontend/message_subclasses.hpp"
+#include "drape_frontend/metaline_manager.hpp"
 #include "drape_frontend/visual_params.hpp"
 
 #include "drape/constants.hpp"
@@ -46,28 +47,51 @@ ReadManager::ReadManager(ref_ptr<ThreadsCommutator> commutator, MapDataProvider 
                          bool allow3dBuildings, bool trafficEnabled)
   : m_commutator(commutator)
   , m_model(model)
-  , m_pool(make_unique_dp<threads::ThreadPool>(kReadingThreadsCount,
-                                               std::bind(&ReadManager::OnTaskFinished, this, _1)))
   , m_have3dBuildings(false)
   , m_allow3dBuildings(allow3dBuildings)
   , m_trafficEnabled(trafficEnabled)
   , m_displacementMode(dp::displacement::kDefaultMode)
   , m_modeChanged(false)
-  , myPool(64, ReadMWMTaskFactory(m_model))
+  , m_tasksPool(64, ReadMWMTaskFactory(m_model))
   , m_counter(0)
   , m_generationCounter(0)
-{}
+  , m_userMarksGenerationCounter(0)
+{
+  Start();
+}
+
+void ReadManager::Start()
+{
+  if (m_pool != nullptr)
+    return;
+
+  using namespace std::placeholders;
+  m_pool = make_unique_dp<threads::ThreadPool>(kReadingThreadsCount,
+                                               std::bind(&ReadManager::OnTaskFinished, this, _1));
+}
+
+void ReadManager::Stop()
+{
+  InvalidateAll();
+  if (m_pool != nullptr)
+    m_pool->Stop();
+  m_pool.reset();
+}
+
+void ReadManager::Restart()
+{
+  Stop();
+  Start();
+}
 
 void ReadManager::OnTaskFinished(threads::IRoutine * task)
 {
   ASSERT(dynamic_cast<ReadMWMTask *>(task) != NULL, ());
-  ReadMWMTask * t = static_cast<ReadMWMTask *>(task);
+  auto t = static_cast<ReadMWMTask *>(task);
 
   // finish tiles
   {
     std::lock_guard<std::mutex> lock(m_finishedTilesMutex);
-
-    m_activeTiles.erase(t->GetTileKey());
 
     // decrement counter
     ASSERT(m_counter > 0, ());
@@ -81,22 +105,26 @@ void ReadManager::OnTaskFinished(threads::IRoutine * task)
 
     if (!task->IsCancelled())
     {
+      m_activeTiles.erase(t->GetTileKey());
+
       TTilesCollection tiles;
       tiles.emplace(t->GetTileKey());
       m_commutator->PostMessage(ThreadsCommutator::ResourceUploadThread,
-                                make_unique_dp<FinishTileReadMessage>(std::move(tiles)),
+                                make_unique_dp<FinishTileReadMessage>(std::move(tiles),
+                                                                      false /* forceUpdateUserMarks */),
                                 MessagePriority::Normal);
     }
   }
 
   t->Reset();
-  myPool.Return(t);
+  m_tasksPool.Return(t);
 }
 
-void ReadManager::UpdateCoverage(ScreenBase const & screen,
-                                 bool have3dBuildings, bool forceUpdate,
+void ReadManager::UpdateCoverage(ScreenBase const & screen, bool have3dBuildings,
+                                 bool forceUpdate, bool forceUpdateUserMarks,
                                  TTilesCollection const & tiles,
-                                 ref_ptr<dp::TextureManager> texMng)
+                                 ref_ptr<dp::TextureManager> texMng,
+                                 ref_ptr<MetalineManager> metalineMng)
 {
   m_modeChanged |= (m_have3dBuildings != have3dBuildings);
   m_have3dBuildings = have3dBuildings;
@@ -110,10 +138,11 @@ void ReadManager::UpdateCoverage(ScreenBase const & screen,
     m_tileInfos.clear();
 
     IncreaseCounter(static_cast<int>(tiles.size()));
-    m_generationCounter++;
+    ++m_generationCounter;
+    ++m_userMarksGenerationCounter;
 
     for (auto const & tileKey : tiles)
-      PushTaskBackForTileKey(tileKey, texMng);
+      PushTaskBackForTileKey(tileKey, texMng, metalineMng);
   }
   else
   {
@@ -139,9 +168,11 @@ void ReadManager::UpdateCoverage(ScreenBase const & screen,
                         std::back_inserter(readyTiles), LessCoverageCell());
 
     IncreaseCounter(static_cast<int>(newTiles.size()));
-    CheckFinishedTiles(readyTiles);
+    if (forceUpdateUserMarks)
+      ++m_userMarksGenerationCounter;
+    CheckFinishedTiles(readyTiles, forceUpdateUserMarks);
     for (auto const & tileKey : newTiles)
-      PushTaskBackForTileKey(tileKey, texMng);
+      PushTaskBackForTileKey(tileKey, texMng, metalineMng);
   }
 
   m_currentViewport = screen;
@@ -167,20 +198,9 @@ void ReadManager::InvalidateAll()
 {
   for (auto const & info : m_tileInfos)
     CancelTileInfo(info);
-
   m_tileInfos.clear();
 
   m_modeChanged = true;
-}
-
-void ReadManager::Stop()
-{
-  for (auto const & info : m_tileInfos)
-    CancelTileInfo(info);
-  m_tileInfos.clear();
-
-  m_pool->Stop();
-  m_pool.reset();
 }
 
 bool ReadManager::CheckTileKey(TileKey const & tileKey) const
@@ -200,15 +220,19 @@ bool ReadManager::MustDropAllTiles(ScreenBase const & screen) const
   return (oldScale != newScale) || !m_currentViewport.GlobalRect().IsIntersect(screen.GlobalRect());
 }
 
-void ReadManager::PushTaskBackForTileKey(TileKey const & tileKey, ref_ptr<dp::TextureManager> texMng)
+void ReadManager::PushTaskBackForTileKey(TileKey const & tileKey,
+                                         ref_ptr<dp::TextureManager> texMng,
+                                         ref_ptr<MetalineManager> metalineMng)
 {
-  auto context = make_unique_dp<EngineContext>(TileKey(tileKey, m_generationCounter),
-                                               m_commutator, texMng, m_customSymbolsContext,
+  ASSERT(m_pool != nullptr, ());
+  auto context = make_unique_dp<EngineContext>(TileKey(tileKey, m_generationCounter, m_userMarksGenerationCounter),
+                                               m_commutator, texMng, metalineMng,
+                                               m_customFeaturesContext,
                                                m_have3dBuildings && m_allow3dBuildings,
                                                m_trafficEnabled, m_displacementMode);
   std::shared_ptr<TileInfo> tileInfo = std::make_shared<TileInfo>(std::move(context));
   m_tileInfos.insert(tileInfo);
-  ReadMWMTask * task = myPool.Get();
+  ReadMWMTask * task = m_tasksPool.Get();
 
   task->Init(tileInfo);
   {
@@ -218,7 +242,7 @@ void ReadManager::PushTaskBackForTileKey(TileKey const & tileKey, ref_ptr<dp::Te
   m_pool->PushBack(task);
 }
 
-void ReadManager::CheckFinishedTiles(TTileInfoCollection const & requestedTiles)
+void ReadManager::CheckFinishedTiles(TTileInfoCollection const & requestedTiles, bool forceUpdateUserMarks)
 {
   if (requestedTiles.empty())
     return;
@@ -228,19 +252,26 @@ void ReadManager::CheckFinishedTiles(TTileInfoCollection const & requestedTiles)
   std::lock_guard<std::mutex> lock(m_finishedTilesMutex);
 
   for (auto const & tile : requestedTiles)
+  {
     if (m_activeTiles.find(tile->GetTileKey()) == m_activeTiles.end())
-      finishedTiles.emplace(tile->GetTileKey());
+      finishedTiles.emplace(tile->GetTileKey(), m_generationCounter, m_userMarksGenerationCounter);
+  }
 
   if (!finishedTiles.empty())
   {
     m_commutator->PostMessage(ThreadsCommutator::ResourceUploadThread,
-                              make_unique_dp<FinishTileReadMessage>(std::move(finishedTiles)),
+                              make_unique_dp<FinishTileReadMessage>(std::move(finishedTiles),
+                                                                    forceUpdateUserMarks),
                               MessagePriority::Normal);
   }
 }
 
 void ReadManager::CancelTileInfo(std::shared_ptr<TileInfo> const & tileToCancel)
 {
+  {
+    std::lock_guard<std::mutex> lock(m_finishedTilesMutex);
+    m_activeTiles.erase(tileToCancel->GetTileKey());
+  }
   tileToCancel->Cancel();
 }
 
@@ -290,35 +321,49 @@ void ReadManager::SetDisplacementMode(int displacementMode)
   }
 }
 
-void ReadManager::UpdateCustomSymbols(CustomSymbols const & symbols)
+bool ReadManager::SetCustomFeatures(std::set<FeatureID> && ids)
 {
-  CustomSymbols currentSymbols = m_customSymbolsContext ? m_customSymbolsContext->m_symbols :
-                                 CustomSymbols();
-  for (auto const & s : symbols)
-    currentSymbols[s.first] = s.second;
-  m_customSymbolsContext = std::make_shared<CustomSymbolsContext>(std::move(currentSymbols));
+  size_t const sz = m_customFeaturesContext ? m_customFeaturesContext->m_features.size() : 0;
+  m_customFeaturesContext = std::make_shared<CustomFeaturesContext>(std::move(ids));
+
+  return sz != m_customFeaturesContext->m_features.size();
 }
 
-void ReadManager::RemoveCustomSymbols(MwmSet::MwmId const & mwmId, std::vector<FeatureID> & leftoverIds)
+std::vector<FeatureID> ReadManager::GetCustomFeaturesArray() const
 {
-  if (!m_customSymbolsContext)
-    return;
+  if (!m_customFeaturesContext)
+    return {};
+  std::vector<FeatureID> features;
+  features.reserve(m_customFeaturesContext->m_features.size());
+  for (auto const & s : m_customFeaturesContext->m_features)
+    features.push_back(s);
+  return features;
+}
 
-  CustomSymbols currentSymbols;
-  leftoverIds.reserve(m_customSymbolsContext->m_symbols.size());
-  for (auto const & s : m_customSymbolsContext->m_symbols)
+bool ReadManager::RemoveCustomFeatures(MwmSet::MwmId const & mwmId)
+{
+  if (!m_customFeaturesContext)
+    return false;
+
+  std::set<FeatureID> features;
+  for (auto const & s : m_customFeaturesContext->m_features)
   {
-    if (s.first.m_mwmId != mwmId)
-    {
-      currentSymbols.insert(std::make_pair(s.first, s.second));
-      leftoverIds.push_back(s.first);
-    }
+    if (s.m_mwmId != mwmId)
+      features.insert(s);
   }
-  m_customSymbolsContext = std::make_shared<CustomSymbolsContext>(std::move(currentSymbols));
+  if (features.size() == m_customFeaturesContext->m_features.size())
+    return false;
+
+  m_customFeaturesContext = std::make_shared<CustomFeaturesContext>(std::move(features));
+  return true;
 }
 
-void ReadManager::RemoveAllCustomSymbols()
+bool ReadManager::RemoveAllCustomFeatures()
 {
-  m_customSymbolsContext = std::make_shared<CustomSymbolsContext>(CustomSymbols());
+  if (!m_customFeaturesContext || m_customFeaturesContext->m_features.empty())
+    return false;
+
+  m_customFeaturesContext = std::make_shared<CustomFeaturesContext>(std::set<FeatureID>());
+  return true;
 }
 } // namespace df

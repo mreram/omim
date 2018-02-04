@@ -1,11 +1,12 @@
-#import "MWMCommon.h"
 #import "MWMStorage.h"
+#import "MWMAlertViewController.h"
+#import "MWMRouter.h"
 
 #include "Framework.h"
 
-#include "platform/platform.hpp"
-
 #include "storage/storage_helpers.hpp"
+
+#include <numeric>
 
 using namespace storage;
 
@@ -50,13 +51,13 @@ using namespace storage;
 
 + (void)deleteNode:(TCountryId const &)countryId
 {
-  auto & f = GetFramework();
-  if (f.IsRoutingActive())
+  if ([MWMRouter isRoutingActive])
   {
     [[MWMAlertViewController activeAlertController] presentDeleteMapProhibitedAlert];
     return;
   }
 
+  auto & f = GetFramework();
   if (f.HasUnsavedEdits(countryId))
   {
     [[MWMAlertViewController activeAlertController]
@@ -82,7 +83,7 @@ using namespace storage;
 + (void)downloadNodes:(TCountriesVec const &)countryIds onSuccess:(MWMVoidBlock)onSuccess
 {
   auto & s = GetFramework().GetStorage();
-  TMwmSize requiredSize = accumulate(countryIds.begin(), countryIds.end(), s.GetMaxMwmSizeBytes(),
+  TMwmSize requiredSize = std::accumulate(countryIds.begin(), countryIds.end(), s.GetMaxMwmSizeBytes(),
                                      [](size_t const & size, TCountryId const & countryId)
                                      {
                                        NodeAttrs nodeAttrs;

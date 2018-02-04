@@ -1,9 +1,12 @@
 #import "MWMPlacePageRegularCell.h"
 #import "MWMCommon.h"
+#import "MWMLocationManager.h"
 #import "MapViewController.h"
 #import "MapsAppDelegate.h"
 #import "Statistics.h"
 #import "UIImageView+Coloring.h"
+
+#include "local_ads/event.hpp"
 
 #include "platform/measurement_utils.hpp"
 #include "platform/settings.hpp"

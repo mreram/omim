@@ -19,13 +19,17 @@ from multiprocessing import Pool, Queue, Process
 
 
 HEADERS = {
-    'mapping': 'osmid fid mwm_id mwm_version'.split(),
-    'sponsored': 'stype sid fid mwm_id mwm_version'.split(),
+    'mapping': 'osmid fid mwm_id mwm_version source_type'.split(),
+    'sponsored': 'sid fid mwm_id mwm_version source_type'.split(),
     'mwm': 'mwm_id name mwm_version'.split(),
 }
 QUEUES = {name: Queue() for name in HEADERS}
 GOOD_TYPES = ("amenity", "shop", "tourism", "leisure", "sport",
               "craft", "man_made", "office", "historic")
+SOURCE_TYPES = {'osm': 0, 'booking': 1}
+
+# Big enough to never intersect with a feature id (there are below 3 mln usually).
+FAKE_FEATURE_ID = 100111000
 
 
 def generate_id_from_name_and_version(name, version):
@@ -33,12 +37,13 @@ def generate_id_from_name_and_version(name, version):
 
 
 def parse_mwm(mwm_name, osm2ft_name, override_version, types_name):
+    region_name = os.path.splitext(os.path.basename(mwm_name))[0]
+    logging.info(region_name)
     with open(osm2ft_name, 'rb') as f:
         ft2osm = mwm.read_osm2ft(f, ft2osm=True, tuples=False)
     with open(mwm_name, 'rb') as f:
         mwm_file = mwm.MWM(f)
         version = override_version or mwm_file.read_version()['version']
-        region_name = os.path.splitext(mwm_name)[0]
         mwm_id = generate_id_from_name_and_version(region_name, version)
         QUEUES['mwm'].put((mwm_id, region_name, version))
         mwm_file.read_header()
@@ -46,14 +51,14 @@ def parse_mwm(mwm_name, osm2ft_name, override_version, types_name):
         for feature in mwm_file.iter_features(metadata=True):
             osm_id = ft2osm.get(feature['id'], None)
             if osm_id is None:
-                if 'ref:sponsored' in feature['metadata']:
+                if 'metadata' in feature and 'ref:sponsored' in feature['metadata']:
                     for t in feature['header']['types']:
                         if t.startswith('sponsored-'):
-                            QUEUES['sponsored'].put((t[t.find('-')+1:],
-                                                     feature['metadata']['ref:sponsored'],
+                            QUEUES['sponsored'].put((feature['metadata']['ref:sponsored'],
                                                      feature['id'],
                                                      mwm_id,
-                                                     version))
+                                                     version,
+                                                     SOURCE_TYPES[t[t.find('-') + 1:]]))
                             break
             else:
                 for t in feature['header']['types']:
@@ -61,8 +66,14 @@ def parse_mwm(mwm_name, osm2ft_name, override_version, types_name):
                         QUEUES['mapping'].put((ctypes.c_long(osm_id).value,
                                                feature['id'],
                                                mwm_id,
-                                               version))
+                                               version,
+                                               SOURCE_TYPES['osm']))
                         break
+    QUEUES['mapping'].put((ctypes.c_long(FAKE_FEATURE_ID).value,
+                           FAKE_FEATURE_ID,
+                           mwm_id,
+                           version,
+                           SOURCE_TYPES['osm']))
 
 
 def write_csv(output_dir, qtype):
@@ -87,9 +98,13 @@ def main():
     parser.add_argument('--types', default=types_default, help='path to omim/data/types.txt')
     parser.add_argument('--threads', type=int, help='number of threads to process files')
     parser.add_argument('--version', type=int, help='override mwm version')
+    parser.add_argument('--debug', action='store_true', help='debug parse_mwm call')
     args = parser.parse_args()
     if not args.osm2ft:
         args.osm2ft = args.mwm
+
+    if not os.path.isdir(args.output):
+        os.mkdir(args.output)
 
     # Create CSV writer processes for each queue and a pool of MWM readers.
     writers = [Process(target=write_csv, args=(args.output, qtype)) for qtype in QUEUES]
@@ -103,8 +118,11 @@ def main():
         if not os.path.exists(osm2ft_name):
             logging.error('Cannot find %s', osm2ft_name)
             sys.exit(2)
-        logging.info(mwm_name)
-        pool.apply_async(parse_mwm, (mwm_name, osm2ft_name, args.version, args.types))
+        parse_mwm_args = (os.path.join(args.mwm, mwm_name), osm2ft_name, args.version, args.types)
+        if args.debug:
+            parse_mwm(*parse_mwm_args)
+        else:
+            pool.apply_async(parse_mwm, parse_mwm_args)
     pool.close()
     pool.join()
     for queue in QUEUES.values():

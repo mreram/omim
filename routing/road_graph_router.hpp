@@ -10,6 +10,7 @@
 #include "indexer/mwm_set.hpp"
 
 #include "geometry/point2d.hpp"
+#include "geometry/tree4d.hpp"
 
 #include "std/function.hpp"
 #include "std/string.hpp"
@@ -25,7 +26,7 @@ class RoadGraphRouter : public IRouter
 {
 public:
   RoadGraphRouter(string const & name, Index const & index, TCountryFileFn const & countryFileFn,
-                  IRoadGraph::Mode mode, unique_ptr<VehicleModelFactory> && vehicleModelFactory,
+                  IRoadGraph::Mode mode, unique_ptr<VehicleModelFactoryInterface> && vehicleModelFactory,
                   unique_ptr<IRoutingAlgorithm> && algorithm,
                   unique_ptr<IDirectionsEngine> && directionsEngine);
   ~RoadGraphRouter() override;
@@ -33,8 +34,8 @@ public:
   // IRouter overrides:
   string GetName() const override { return m_name; }
   void ClearState() override;
-  ResultCode CalculateRoute(m2::PointD const & startPoint, m2::PointD const & startDirection,
-                            m2::PointD const & finalPoint, RouterDelegate const & delegate,
+  ResultCode CalculateRoute(Checkpoints const & checkpoints, m2::PointD const & startDirection,
+                            bool adjustToPrevRoute, RouterDelegate const & delegate,
                             Route & route) override;
 
 private:
@@ -50,7 +51,13 @@ private:
   unique_ptr<IDirectionsEngine> const m_directionsEngine;
 };
 
-unique_ptr<IRouter> CreatePedestrianAStarRouter(Index & index, TCountryFileFn const & countryFileFn);
-unique_ptr<IRouter> CreatePedestrianAStarBidirectionalRouter(Index & index, TCountryFileFn const & countryFileFn);
-unique_ptr<IRouter> CreateBicycleAStarBidirectionalRouter(Index & index, TCountryFileFn const & countryFileFn);
+unique_ptr<IRouter> CreatePedestrianAStarRouter(Index & index,
+                                                TCountryFileFn const & countryFileFn,
+                                                shared_ptr<NumMwmIds> numMwmIds);
+unique_ptr<IRouter> CreatePedestrianAStarBidirectionalRouter(Index & index,
+                                                             TCountryFileFn const & countryFileFn,
+                                                             shared_ptr<NumMwmIds> /* numMwmIds */);
+unique_ptr<IRouter> CreateBicycleAStarBidirectionalRouter(Index & index,
+                                                          TCountryFileFn const & countryFileFn,
+                                                          shared_ptr<NumMwmIds> numMwmIds);
 }  // namespace routing

@@ -1,17 +1,22 @@
 #import "BookmarksRootVC.h"
 #import "BookmarksVC.h"
-#import "MWMCommon.h"
+#import "MWMBookmarksManager.h"
+#import "MWMCircularProgress.h"
 #import "Statistics.h"
 #import "UIImageView+Coloring.h"
 
 #include "Framework.h"
-#include "platform/platform.hpp"
 
 #define TEXTFIELD_TAG 999
 
 extern NSString * const kBookmarkCategoryDeletedNotification =
     @"BookmarkCategoryDeletedNotification";
 
+@interface BookmarksRootVC ()<MWMBookmarksObserver>
+
+@property(nonatomic) MWMCircularProgress * spinner;
+
+@end
 
 @implementation BookmarksRootVC
 
@@ -23,10 +28,7 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
     self.title = L(@"bookmarks");
 
     self.tableView.allowsSelectionDuringEditing = YES;
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(newCategoryAdded)
-                                                 name:@"KML file added"
-                                               object:nil];
+    [MWMBookmarksManager addObserver:self];
   }
   return self;
 }
@@ -34,22 +36,26 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
 // Used to display add bookmarks hint
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section
 {
-  CGFloat const offset = 10;
-
   CGRect const rect = tableView.bounds;
   // Use UILabel inside custom view to add padding on the left and right (there is no other way to do it)
   if (!m_hint)
   {
     m_hint = [[UIView alloc] initWithFrame:rect];
     m_hint.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    m_hint.backgroundColor = [UIColor clearColor];
+    m_hint.backgroundColor = UIColor.clearColor;
 
     UILabel * label = [[UILabel alloc] initWithFrame:rect];
-    label.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    label.backgroundColor = [UIColor clearColor];
-    bool const showDetailedHint = !GetFramework().GetBmCategoriesCount();
-    label.text = showDetailedHint ? L(@"bookmarks_usage_hint")
-                                  : L(@"bookmarks_usage_hint_import_only");
+    label.backgroundColor = UIColor.clearColor;
+    if ([self shouldShowSpinner])
+    {
+      label.text = L(@"load_kmz_title");
+    }
+    else
+    {
+      bool const showDetailedHint = !GetFramework().GetBmCategoriesCount();
+      label.text =
+          showDetailedHint ? L(@"bookmarks_usage_hint") : L(@"bookmarks_usage_hint_import_only");
+    }
     label.textAlignment = NSTextAlignmentCenter;
     label.lineBreakMode = NSLineBreakByWordWrapping;
     label.numberOfLines = 0;
@@ -57,6 +63,14 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
     [m_hint addSubview:label];
   }
   UILabel * label = m_hint.subviews.firstObject;
+
+  CGFloat offset = 10;
+  if (@available(iOS 11.0, *))
+  {
+    UIEdgeInsets const safeAreaInsets = tableView.safeAreaInsets;
+    offset = max(max(safeAreaInsets.top, safeAreaInsets.bottom),
+                 max(safeAreaInsets.left, safeAreaInsets.right));
+  }
   label.bounds = CGRectInset(rect, offset, offset);
   [label sizeToIntegralFit];
   m_hint.bounds = CGRectMake(0, 0, rect.size.width, label.bounds.size.height + 2 * offset);
@@ -65,10 +79,36 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
   return m_hint.bounds.size.height;
 }
 
+- (BOOL)shouldShowSpinner
+{
+  return ![MWMBookmarksManager areBookmarksLoaded];
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section
+{
+  return [self shouldShowSpinner] ? 40 : 0;
+}
+
 // Used to display hint when no any categories with bookmarks are present
 - (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section
 {
   return m_hint;
+}
+
+- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section
+{
+  if (![self shouldShowSpinner])
+    return nil;
+  auto header = [[UIView alloc] initWithFrame:tableView.bounds];
+  CGFloat const size = [self tableView:tableView heightForHeaderInSection:section];
+  CGFloat const offset = 10;
+  CGRect const rect = CGRectInset({{}, {size, size}}, offset, offset);
+  auto spinnerView = [[UIView alloc] initWithFrame:rect];
+  [header addSubview:spinnerView];
+  spinnerView.center = {header.width / 2, spinnerView.center.y};
+  self.spinner = [[MWMCircularProgress alloc] initWithParentView:spinnerView];
+  self.spinner.state = MWMCircularProgressStateSpinner;
+  return header;
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
@@ -94,10 +134,8 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
                      withParameters:@{kStatValue : visible ? kStatVisible : kStatHidden}];
     cell.imageView.image = [UIImage imageNamed:(visible ? @"ic_show" : @"ic_hide")];
     cell.imageView.mwm_coloring = visible ? MWMImageColoringBlue : MWMImageColoringBlack;
-    {
-      BookmarkCategory::Guard guard(*cat);
-      guard.m_controller.SetIsVisible(visible);
-    }
+    cat->SetIsVisible(visible);
+    cat->NotifyChanges();
     cat->SaveToKMLFile();
   }
 }
@@ -136,6 +174,7 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator
 {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
   [coordinator
       animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
         NSArray<NSIndexPath *> * ips = self.tableView.indexPathsForVisibleRows;
@@ -178,7 +217,7 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
         BookmarkCategory * cat = GetFramework().GetBmCategory([self.tableView indexPathForCell:cell].row);
         if (cat)
         {
-          cat->SetName([txt UTF8String]);
+          cat->SetName(txt.UTF8String);
           cat->SaveToKMLFile();
         }
       }
@@ -239,7 +278,8 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
   if (editingStyle == UITableViewCellEditingStyleDelete)
   {
     [Statistics logEvent:kStatEventName(kStatPlacePage, kStatRemove)];
-    [[NSNotificationCenter defaultCenter] postNotificationName:kBookmarkCategoryDeletedNotification object:@(indexPath.row)];
+    [NSNotificationCenter.defaultCenter postNotificationName:kBookmarkCategoryDeletedNotification
+                                                      object:@(indexPath.row)];
     Framework & f = GetFramework();
     f.DeleteBmCategory(indexPath.row);
     [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
@@ -305,14 +345,7 @@ extern NSString * const kBookmarkCategoryDeletedNotification =
   return NO;
 }
 
--(void)newCategoryAdded
-{
-  [self.tableView reloadData];
-}
-
--(void)dealloc
-{
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
+#pragma mark - MWMBookmarksObserver
+- (void)onBookmarksLoadFinished { [self.tableView reloadData]; }
 
 @end

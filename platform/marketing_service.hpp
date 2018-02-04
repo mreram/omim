@@ -18,10 +18,12 @@ extern char const * const kRoutingP2PVehicleDiscovered;
 extern char const * const kRoutingP2PPedestrianDiscovered;
 extern char const * const kRoutingP2PBicycleDiscovered;
 extern char const * const kRoutingP2PTaxiDiscovered;
+extern char const * const kRoutingP2PTransitDiscovered;
 extern char const * const kRoutingVehicleDiscovered;
 extern char const * const kRoutingPedestrianDiscovered;
 extern char const * const kRoutingBicycleDiscovered;
 extern char const * const kRoutingTaxiDiscovered;
+extern char const * const kRoutingTransitDiscovered;
 extern char const * const kEditorAddDiscovered;
 extern char const * const kEditorEditDiscovered;
 extern char const * const kTrafficDiscovered;
@@ -29,11 +31,12 @@ extern char const * const kTrafficDiscovered;
 // Events.
 extern char const * const kDownloaderMapActionFinished;
 extern char const * const kSearchEmitResultsAndCoords;
-extern char const * const kRoutingCalculatingRoute;
 extern char const * const kBookmarksBookmarkAction;
 extern char const * const kPlacepageHotelBook;
 extern char const * const kEditorAddStart;
 extern char const * const kEditorEditStart;
+extern char const * const kDiffSchemeFallback;
+extern char const * const kDiffSchemeError;
 
 // Settings.
 extern char const * const kFrom;

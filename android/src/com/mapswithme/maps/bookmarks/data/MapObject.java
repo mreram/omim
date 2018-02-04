@@ -9,6 +9,9 @@ import android.text.TextUtils;
 
 import com.mapswithme.maps.ads.Banner;
 import com.mapswithme.maps.ads.LocalAdInfo;
+import com.mapswithme.maps.routing.RoutePointInfo;
+import com.mapswithme.maps.taxi.TaxiManager;
+import com.mapswithme.maps.ugc.UGC;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -31,13 +34,11 @@ public class MapObject implements Parcelable
   public static final int SEARCH = 4;
 
   @NonNull
-  private final String mMwmName;
-  private final long mMwmVersion;
-  private final int mFeatureIndex;
+  private final FeatureId mFeatureId;
   @MapObjectType
   private final int mMapObjectType;
 
-  protected String mTitle;
+  private String mTitle;
   @Nullable
   private String mSecondaryTitle;
   private String mSubtitle;
@@ -48,31 +49,46 @@ public class MapObject implements Parcelable
   private String mApiId;
   @Nullable
   private List<Banner> mBanners;
-  private boolean mReachableByTaxi;
+  @Nullable
+  private List<Integer> mReachableByTaxiTypes;
   @Nullable
   private String mBookingSearchUrl;
   @Nullable
   private LocalAdInfo mLocalAdInfo;
+  @Nullable
+  private RoutePointInfo mRoutePointInfo;
+  private boolean mExtendedView;
+  private boolean mShouldShowUGC;
+  private boolean mCanBeRated;
+  private boolean mCanBeReviewed;
+  @Nullable
+  private ArrayList<UGC.Rating> mRatings;
 
-  public MapObject(@NonNull String mwmName, long mwmVersion, int featureIndex,
-                   @MapObjectType int mapObjectType, String title, @Nullable String secondaryTitle,
-                   String subtitle, String address, double lat, double lon, String apiId,
-                   @Nullable Banner[] banners, boolean reachableByTaxi,
-                   @Nullable String bookingSearchUrl, @Nullable LocalAdInfo localAdInfo)
+  public MapObject(@NonNull FeatureId featureId, @MapObjectType int mapObjectType, String title,
+                   @Nullable String secondaryTitle, String subtitle, String address,
+                   double lat, double lon, String apiId,
+                   @Nullable Banner[] banners, @Nullable @TaxiManager.TaxiType int[] types,
+                   @Nullable String bookingSearchUrl, @Nullable LocalAdInfo localAdInfo,
+                   @Nullable RoutePointInfo routePointInfo, boolean isExtendedView,
+                   boolean shouldShowUGC, boolean canBeRated, boolean canBeReviewed,
+                   @Nullable UGC.Rating[] ratings)
   {
-    this(mwmName, mwmVersion, featureIndex, mapObjectType, title, secondaryTitle, subtitle, address,
-         lat, lon, new Metadata(), apiId, banners, reachableByTaxi, bookingSearchUrl, localAdInfo);
+    this(featureId, mapObjectType, title, secondaryTitle,
+         subtitle, address, lat, lon, new Metadata(), apiId, banners,
+         types, bookingSearchUrl, localAdInfo, routePointInfo, isExtendedView, shouldShowUGC,
+         canBeRated, canBeReviewed, ratings);
   }
 
-  public MapObject(@NonNull String mwmName, long mwmVersion, int featureIndex,
-                   @MapObjectType int mapObjectType, String title, @Nullable String secondaryTitle,
+  public MapObject(@NonNull FeatureId featureId, @MapObjectType int mapObjectType,
+                   String title, @Nullable String secondaryTitle,
                    String subtitle, String address, double lat, double lon, Metadata metadata,
-                   String apiId, @Nullable Banner[] banners, boolean reachableByTaxi,
-                   @Nullable String bookingSearchUrl, @Nullable LocalAdInfo localAdInfo)
+                   String apiId, @Nullable Banner[] banners, @Nullable @TaxiManager.TaxiType int[] taxiTypes,
+                   @Nullable String bookingSearchUrl, @Nullable LocalAdInfo localAdInfo,
+                   @Nullable RoutePointInfo routePointInfo, boolean isExtendedView,
+                   boolean shouldShowUGC, boolean canBeRated, boolean canBeReviewed,
+                   @Nullable UGC.Rating[] ratings)
   {
-    mMwmName = mwmName;
-    mMwmVersion = mwmVersion;
-    mFeatureIndex = featureIndex;
+    mFeatureId = featureId;
     mMapObjectType = mapObjectType;
     mTitle = title;
     mSecondaryTitle = secondaryTitle;
@@ -82,19 +98,29 @@ public class MapObject implements Parcelable
     mLon = lon;
     mMetadata = metadata;
     mApiId = apiId;
-    mReachableByTaxi = reachableByTaxi;
     mBookingSearchUrl = bookingSearchUrl;
     mLocalAdInfo = localAdInfo;
+    mRoutePointInfo = routePointInfo;
+    mExtendedView = isExtendedView;
+    mShouldShowUGC = shouldShowUGC;
+    mCanBeRated = canBeRated;
+    mCanBeReviewed = canBeReviewed;
     if (banners != null)
       mBanners = new ArrayList<>(Arrays.asList(banners));
+    if (taxiTypes != null)
+    {
+      mReachableByTaxiTypes = new ArrayList<>();
+      for (int type : taxiTypes)
+        mReachableByTaxiTypes.add(type);
+    }
+    if (ratings != null)
+      mRatings = new ArrayList<>(Arrays.asList(ratings));
   }
 
   protected MapObject(@MapObjectType int type, Parcel source)
   {
     //noinspection ResourceType
-    this(source.readString(), // MwmName
-         source.readLong(),   // MwmVersion
-         source.readInt(),    // FeatureId
+    this((FeatureId) source.readParcelable(FeatureId.class.getClassLoader()), // FeatureId
          type, // MapObjectType
          source.readString(), // Title
          source.readString(), // SecondaryTitle
@@ -105,18 +131,54 @@ public class MapObject implements Parcelable
          (Metadata) source.readParcelable(Metadata.class.getClassLoader()),
          source.readString(), // ApiId;
          null, // mBanners
-         source.readByte() != 0, // ReachableByTaxi
+         null, // mReachableByTaxiTypes
          source.readString(), // BookingSearchUrl
-         (LocalAdInfo) source.readParcelable(LocalAdInfo.class.getClassLoader())); // LocalAdInfo
+         (LocalAdInfo) source.readParcelable(LocalAdInfo.class.getClassLoader()), // LocalAdInfo
+         (RoutePointInfo) source.readParcelable(RoutePointInfo.class.getClassLoader()), // RoutePointInfo
+         source.readInt() == 1, // mExtendedView
+         source.readInt() == 1, // mShouldShowUGC
+         source.readInt() == 1, // mCanBeRated;
+         source.readInt() == 1, // mCanBeReviewed
+         null); // mRatings
+
     mBanners = readBanners(source);
+    mReachableByTaxiTypes = readTaxiTypes(source);
+    mRatings = readRatings(source);
+  }
+
+  @NonNull
+  public static MapObject createMapObject(@NonNull FeatureId featureId, @MapObjectType int mapObjectType,
+                                   @NonNull String title, @NonNull String subtitle, double lat, double lon)
+  {
+    return new MapObject(featureId, mapObjectType, title,
+                         "", subtitle, "", lat, lon, "", null,
+                         null, "", null, null, false /* isExtendedView */,
+                         false /* shouldShowUGC */, false /* canBeRated */, false /* canBeReviewed */,
+                         null /* ratings */);
   }
 
   @Nullable
-  private List<Banner> readBanners(Parcel source)
+  private List<Banner> readBanners(@NonNull Parcel source)
   {
     List<Banner> banners = new ArrayList<>();
     source.readTypedList(banners, Banner.CREATOR);
     return banners.isEmpty() ? null : banners;
+  }
+
+  @Nullable
+  private ArrayList<UGC.Rating> readRatings(@NonNull Parcel source)
+  {
+    ArrayList<UGC.Rating> ratings = new ArrayList<>();
+    source.readTypedList(ratings, UGC.Rating.CREATOR);;
+    return ratings.isEmpty() ? null : ratings;
+  }
+
+  @NonNull
+  private List<Integer> readTaxiTypes(@NonNull Parcel source)
+  {
+    List<Integer> types = new ArrayList<>();
+    source.readList(types, Integer.class.getClassLoader());
+    return types;
   }
 
   /**
@@ -190,9 +252,16 @@ public class MapObject implements Parcelable
     return mBanners;
   }
 
-  public boolean isReachableByTaxi()
+  @Nullable
+  public ArrayList<UGC.Rating> getDefaultRatings()
   {
-    return mReachableByTaxi;
+    return mRatings;
+  }
+
+  @Nullable
+  public List<Integer> getReachableByTaxiTypes()
+  {
+    return mReachableByTaxiTypes;
   }
 
   public void setLat(double lat)
@@ -248,20 +317,36 @@ public class MapObject implements Parcelable
     return mLocalAdInfo;
   }
 
+  @Nullable
+  public RoutePointInfo getRoutePointInfo()
+  {
+    return mRoutePointInfo;
+  }
+
+  public boolean isExtendedView()
+  {
+    return mExtendedView;
+  }
+
+  public boolean shouldShowUGC()
+  {
+    return mShouldShowUGC;
+  }
+
+  public boolean canBeRated()
+  {
+    return mCanBeRated;
+  }
+
+  public boolean canBeReviewed()
+  {
+    return mCanBeReviewed;
+  }
+
   @NonNull
-  public String getMwmName()
+  public FeatureId getFeatureId()
   {
-    return mMwmName;
-  }
-
-  public long getMwmVersion()
-  {
-    return mMwmVersion;
-  }
-
-  public int getFeatureIndex()
-  {
-    return mFeatureIndex;
+    return mFeatureId;
   }
 
   private  static MapObject readFromParcel(Parcel source)
@@ -285,9 +370,7 @@ public class MapObject implements Parcelable
     // A map object type must be written first, since it's used in readParcel method to distinguish
     // what type of object should be read from the parcel.
     dest.writeInt(mMapObjectType);
-    dest.writeString(mMwmName);
-    dest.writeLong(mMwmVersion);
-    dest.writeInt(mFeatureIndex);
+    dest.writeParcelable(mFeatureId, 0);
     dest.writeString(mTitle);
     dest.writeString(mSecondaryTitle);
     dest.writeString(mSubtitle);
@@ -296,10 +379,32 @@ public class MapObject implements Parcelable
     dest.writeDouble(mLon);
     dest.writeParcelable(mMetadata, 0);
     dest.writeString(mApiId);
-    dest.writeByte((byte) (mReachableByTaxi ? 1 : 0));
     dest.writeString(mBookingSearchUrl);
     dest.writeParcelable(mLocalAdInfo, 0);
+    dest.writeParcelable(mRoutePointInfo, 0);
+    dest.writeInt(mExtendedView ? 1 : 0);
+    dest.writeInt(mShouldShowUGC ? 1 : 0);
+    dest.writeInt(mCanBeRated ? 1 : 0);
+    dest.writeInt(mCanBeReviewed ? 1 : 0);
     dest.writeTypedList(mBanners);
+    dest.writeList(mReachableByTaxiTypes);
+    dest.writeTypedList(mRatings);
+  }
+
+  @Override
+  public boolean equals(Object o)
+  {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    MapObject mapObject = (MapObject) o;
+    return mFeatureId.equals(mapObject.mFeatureId);
+  }
+
+  @Override
+  public int hashCode()
+  {
+    return mFeatureId.hashCode();
   }
 
   public static final Creator<MapObject> CREATOR = new Creator<MapObject>()

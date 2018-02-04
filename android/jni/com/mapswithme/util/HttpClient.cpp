@@ -23,9 +23,9 @@ SOFTWARE.
 *******************************************************************************/
 #include <jni.h>
 
-#include "../core/jni_helper.hpp"
-#include "../core/ScopedEnv.hpp"
-#include "../core/ScopedLocalRef.hpp"
+#include "com/mapswithme/core/jni_helper.hpp"
+#include "com/mapswithme/core/ScopedEnv.hpp"
+#include "com/mapswithme/core/ScopedLocalRef.hpp"
 
 #include "platform/http_client.hpp"
 
@@ -34,6 +34,7 @@ SOFTWARE.
 #include "base/logging.hpp"
 
 #include <string>
+#include <iterator>
 #include <unordered_map>
 
 DECLARE_EXCEPTION(JniException, RootException);
@@ -75,6 +76,12 @@ void SetBoolean(ScopedEnv & env, jobject params, jfieldID const fieldId, bool co
   RethrowOnJniException(env);
 }
 
+void SetInt(ScopedEnv & env, jobject params, jfieldID const fieldId, int const value)
+{
+  env->SetIntField(params, fieldId, value);
+  RethrowOnJniException(env);
+}
+
 // Get string value from HttpClient.Params object, throws JniException.
 void GetString(ScopedEnv & env, jobject const params, jfieldID const fieldId, std::string & result)
 {
@@ -97,22 +104,12 @@ void SetHeaders(ScopedEnv & env, jobject const params,
   if (headers.empty())
     return;
 
-  static jmethodID const headerInit = jni::GetConstructorID(
-      env.get(), g_httpHeaderClazz, "(Ljava/lang/String;Ljava/lang/String;)V");
   static jmethodID const setHeaders = env->GetMethodID(
-      g_httpParamsClazz, "setHeaders", "([Lcom/mapswithme/util/HttpClient$HttpHeader;)V");
+      g_httpParamsClazz, "setHeaders", "([Lcom/mapswithme/util/KeyValue;)V");
 
   RethrowOnJniException(env);
 
-  using HeaderPair = std::unordered_map<std::string, std::string>::value_type;
-  auto headerFunc = [](JNIEnv * env, HeaderPair const & item)
-  {
-    jni::TScopedLocalRef first(env, jni::ToJavaString(env, item.first));
-    jni::TScopedLocalRef second(env, jni::ToJavaString(env, item.second));
-    return env->NewObject(g_httpHeaderClazz, headerInit, first.get(), second.get());
-  };
-  jni::TScopedLocalObjectArrayRef jHeaders(env.get(), jni::ToJavaArray(env.get(), g_httpHeaderClazz,
-                                           headers, headerFunc));
+  jni::TScopedLocalObjectArrayRef jHeaders(env.get(), jni::ToKeyValueArray(env.get(), headers));
   env->CallVoidMethod(params, setHeaders, jHeaders.get());
   RethrowOnJniException(env);
 }
@@ -121,8 +118,6 @@ void LoadHeaders(ScopedEnv & env, jobject const params, std::unordered_map<std::
 {
   static jmethodID const getHeaders =
       env->GetMethodID(g_httpParamsClazz, "getHeaders", "()[Ljava/lang/Object;");
-  static jfieldID const keyId = env->GetFieldID(g_httpHeaderClazz, "key", "Ljava/lang/String;");
-  static jfieldID const valueId = env->GetFieldID(g_httpHeaderClazz, "value", "Ljava/lang/String;");
 
   jni::ScopedLocalRef<jobjectArray> const headersArray(
       env.get(), static_cast<jobjectArray>(env->CallObjectMethod(params, getHeaders)));
@@ -130,20 +125,8 @@ void LoadHeaders(ScopedEnv & env, jobject const params, std::unordered_map<std::
   RethrowOnJniException(env);
 
   headers.clear();
-  int const length = env->GetArrayLength(headersArray.get());
-  for (size_t i = 0; i < length; ++i)
-  {
-    jni::ScopedLocalRef<jobject> const headerEntry(
-        env.get(), env->GetObjectArrayElement(headersArray.get(), i));
+  jni::ToNativekeyValueContainer(env.get(), headersArray, std::inserter(headers, headers.end()));
 
-    jni::ScopedLocalRef<jstring> const key(
-        env.get(), static_cast<jstring>(env->GetObjectField(headerEntry.get(), keyId)));
-    jni::ScopedLocalRef<jstring> const value(
-        env.get(), static_cast<jstring>(env->GetObjectField(headerEntry.get(), valueId)));
-
-    headers.emplace(jni::ToNativeString(env.get(), key.get()),
-                    jni::ToNativeString(env.get(), value.get()));
-  }
   RethrowOnJniException(env);
 }
 
@@ -160,7 +143,8 @@ public:
     {"receivedUrl", GetHttpParamsFieldId(env, "receivedUrl")},
     {"followRedirects", GetHttpParamsFieldId(env, "followRedirects", "Z")},
     {"loadHeaders", GetHttpParamsFieldId(env, "loadHeaders", "Z")},
-    {"httpResponseCode", GetHttpParamsFieldId(env, "httpResponseCode", "I")}};
+    {"httpResponseCode", GetHttpParamsFieldId(env, "httpResponseCode", "I")},
+    {"timeoutMillisec", GetHttpParamsFieldId(env, "timeoutMillisec", "I")}};
   }
 
   jfieldID GetId(std::string const & fieldName) const
@@ -232,6 +216,8 @@ bool HttpClient::RunHttpRequest()
     SetString(env, httpParamsObject.get(), ids.GetId("cookies"), m_cookies);
     SetBoolean(env, httpParamsObject.get(), ids.GetId("followRedirects"), m_handleRedirects);
     SetBoolean(env, httpParamsObject.get(), ids.GetId("loadHeaders"), m_loadHeaders);
+    SetInt(env, httpParamsObject.get(), ids.GetId("timeoutMillisec"),
+           static_cast<int>(m_timeoutSec * 1000));
 
     SetHeaders(env, httpParamsObject.get(), m_headers);
   }

@@ -1,6 +1,6 @@
-#include "routing/osrm_helpers.hpp"
-#include "routing/routing_mapping.hpp"
 #include "routing/turns_generator.hpp"
+
+#include "routing/router.hpp"
 
 #include "routing_common/car_model.hpp"
 
@@ -14,8 +14,6 @@
 #include "std/cmath.hpp"
 #include "std/numeric.hpp"
 #include "std/string.hpp"
-
-#include "3party/osrm/osrm-backend/data_structures/internal_route_result.hpp"
 
 using namespace routing;
 using namespace routing::turns;
@@ -33,7 +31,7 @@ double constexpr kNotSoCloseMinDistMeters = 30.;
  * - and the other possible turns lead to small roads;
  * - and the turn is GoStraight or TurnSlight*.
  */
-bool KeepTurnByHighwayClass(TurnDirection turn, TurnCandidates const & possibleTurns,
+bool KeepTurnByHighwayClass(CarDirection turn, TurnCandidates const & possibleTurns,
                             TurnInfo const & turnInfo)
 {
   if (!IsGoStraightOrSlightTurn(turn))
@@ -46,7 +44,7 @@ bool KeepTurnByHighwayClass(TurnDirection turn, TurnCandidates const & possibleT
   ftypes::HighwayClass maxClassForPossibleTurns = ftypes::HighwayClass::Error;
   for (auto const & t : possibleTurns.candidates)
   {
-    if (t.m_nodeId == turnInfo.m_outgoing.m_nodeId)
+    if (t.m_segmentRange == turnInfo.m_outgoing.m_segmentRange)
       continue;
     ftypes::HighwayClass const highwayClass = t.highwayClass;
     if (static_cast<int>(highwayClass) > static_cast<int>(maxClassForPossibleTurns))
@@ -80,12 +78,12 @@ bool KeepTurnByHighwayClass(TurnDirection turn, TurnCandidates const & possibleT
 /*!
  * \brief Returns false when other possible turns leads to service roads;
  */
-bool KeepRoundaboutTurnByHighwayClass(TurnDirection turn, TurnCandidates const & possibleTurns,
+bool KeepRoundaboutTurnByHighwayClass(CarDirection turn, TurnCandidates const & possibleTurns,
                                       TurnInfo const & turnInfo)
 {
   for (auto const & t : possibleTurns.candidates)
   {
-    if (t.m_nodeId == turnInfo.m_outgoing.m_nodeId)
+    if (t.m_segmentRange == turnInfo.m_outgoing.m_segmentRange)
       continue;
     if (static_cast<int>(t.highwayClass) != static_cast<int>(ftypes::HighwayClass::Service))
       return true;
@@ -93,7 +91,7 @@ bool KeepRoundaboutTurnByHighwayClass(TurnDirection turn, TurnCandidates const &
   return false;
 }
 
-bool DiscardTurnByIngoingAndOutgoingEdges(TurnDirection intermediateDirection,
+bool DiscardTurnByIngoingAndOutgoingEdges(CarDirection intermediateDirection,
                                           TurnInfo const & turnInfo, TurnItem const & turn)
 {
   return !turn.m_keepAnyway && !turnInfo.m_ingoing.m_onRoundabout &&
@@ -118,8 +116,8 @@ bool KeepTurnByIngoingEdges(m2::PointD const & junctionPoint,
   return hasMultiTurns || (!isGoStraightOrSlightTurn && turnEdgesCount > 1);
 }
 
-bool FixupLaneSet(TurnDirection turn, vector<SingleLaneInfo> & lanes,
-                  function<bool(LaneWay l, TurnDirection t)> checker)
+bool FixupLaneSet(CarDirection turn, vector<SingleLaneInfo> & lanes,
+                  function<bool(LaneWay l, CarDirection t)> checker)
 {
   bool isLaneConformed = false;
   // There are two nested loops below. (There is a for-loop in checker.)
@@ -147,14 +145,14 @@ bool FixupLaneSet(TurnDirection turn, vector<SingleLaneInfo> & lanes,
  * These angles should be measured in degrees and should belong to the range [-180; 180].
  * The second paramer (angle) shall belong to the range [-180; 180] and is measured in degrees.
  */
-TurnDirection FindDirectionByAngle(vector<pair<double, TurnDirection>> const & lowerBounds,
+CarDirection FindDirectionByAngle(vector<pair<double, CarDirection>> const & lowerBounds,
                                    double angle)
 {
   ASSERT_GREATER_OR_EQUAL(angle, -180., (angle));
   ASSERT_LESS_OR_EQUAL(angle, 180., (angle));
   ASSERT(!lowerBounds.empty(), ());
   ASSERT(is_sorted(lowerBounds.cbegin(), lowerBounds.cend(),
-             [](pair<double, TurnDirection> const & p1, pair<double, TurnDirection> const & p2)
+             [](pair<double, CarDirection> const & p1, pair<double, CarDirection> const & p2)
          {
            return p1.first > p2.first;
          }), ());
@@ -166,7 +164,7 @@ TurnDirection FindDirectionByAngle(vector<pair<double, TurnDirection>> const & l
   }
 
   ASSERT(false, ("The angle is not covered by the table. angle = ", angle));
-  return TurnDirection::NoTurn;
+  return CarDirection::None;
 }
 
 /*!
@@ -256,30 +254,21 @@ bool TurnInfo::IsSegmentsValid() const
 
 IRouter::ResultCode MakeTurnAnnotation(turns::IRoutingResult const & result,
                                        RouterDelegate const & delegate,
-                                       vector<Junction> & junctions,
-                                       Route::TTurns & turnsDir, Route::TTimes & times,
-                                       Route::TStreets & streets,
-                                       vector<Segment> & trafficSegs)
+                                       vector<Junction> & junctions, Route::TTurns & turnsDir,
+                                       Route::TStreets & streets, vector<Segment> & segments)
 {
-  double estimatedTime = 0;
-
   LOG(LDEBUG, ("Shortest th length:", result.GetPathLength()));
-
-#ifdef DEBUG
-  size_t lastIdx = 0;
-#endif
 
   if (delegate.IsCancelled())
     return IRouter::Cancelled;
   // Annotate turns.
   size_t skipTurnSegments = 0;
   auto const & loadedSegments = result.GetSegments();
-  trafficSegs.reserve(loadedSegments.size());
+  segments.reserve(loadedSegments.size());
   for (auto loadedSegmentIt = loadedSegments.cbegin(); loadedSegmentIt != loadedSegments.cend();
        ++loadedSegmentIt)
   {
-    // ETA information.
-    double const nodeTimeSeconds = loadedSegmentIt->m_weight;
+    CHECK(loadedSegmentIt->IsValid(), ());
 
     // Street names. I put empty names too, to avoid freezing old street name while riding on
     // unnamed street.
@@ -296,36 +285,35 @@ IRouter::ResultCode MakeTurnAnnotation(turns::IRoutingResult const & result,
 
       turns::TurnInfo turnInfo(loadedSegments[segmentIndex - 1], *loadedSegmentIt);
 
-      if (turnItem.m_turn == turns::TurnDirection::NoTurn)
+      if (turnItem.m_turn == turns::CarDirection::None)
         turns::GetTurnDirection(result, turnInfo, turnItem);
 
-#ifdef DEBUG
-      double distMeters = 0.0;
-      for (size_t k = lastIdx + 1; k < junctions.size(); ++k)
-        distMeters += MercatorBounds::DistanceOnEarth(junctions[k - 1].GetPoint(), junctions[k].GetPoint());
-      LOG(LDEBUG, ("Speed:", 3.6 * distMeters / nodeTimeSeconds, "kmph; Dist:", distMeters, "Time:",
-                   nodeTimeSeconds, "s", lastIdx, "e", junctions.size(), "source:",
-                   turnItem.m_sourceName, "target:", turnItem.m_targetName));
-      lastIdx = junctions.size();
-#endif
-      times.push_back(Route::TTimeItem(junctions.size(), estimatedTime));
-
       //  Lane information.
-      if (turnItem.m_turn != turns::TurnDirection::NoTurn)
+      if (turnItem.m_turn != turns::CarDirection::None)
       {
         turnItem.m_lanes = turnInfo.m_ingoing.m_lanes;
         turnsDir.push_back(move(turnItem));
       }
     }
 
-    estimatedTime += nodeTimeSeconds;
     if (skipTurnSegments > 0)
       --skipTurnSegments;
 
     // Path geometry.
-    junctions.insert(junctions.end(), loadedSegmentIt->m_path.begin(), loadedSegmentIt->m_path.end());
-    trafficSegs.insert(trafficSegs.end(), loadedSegmentIt->m_trafficSegs.cbegin(),
-                       loadedSegmentIt->m_trafficSegs.cend());
+    CHECK_GREATER_OR_EQUAL(loadedSegmentIt->m_path.size(), 2, ());
+    // Note. Every LoadedPathSegment in TUnpackedPathSegments contains LoadedPathSegment::m_path
+    // of several Junctions. Last Junction in a LoadedPathSegment::m_path is equal to first junction
+    // in next LoadedPathSegment::m_path in vector TUnpackedPathSegments:
+    // *---*---*---*---*       *---*           *---*---*---*
+    //                 *---*---*   *---*---*---*
+    // To prevent having repetitions in |junctions| list it's necessary to take the first point only from the
+    // first item of |loadedSegments|. The beginning should be ignored for the rest |m_path|.
+    junctions.insert(junctions.end(), loadedSegmentIt == loadedSegments.cbegin()
+                                          ? loadedSegmentIt->m_path.cbegin()
+                                          : loadedSegmentIt->m_path.cbegin() + 1,
+                     loadedSegmentIt->m_path.cend());
+    segments.insert(segments.end(), loadedSegmentIt->m_segments.cbegin(),
+                    loadedSegmentIt->m_segments.cend());
   }
 
   // Path found. Points will be replaced by start and end edges junctions.
@@ -338,8 +326,7 @@ IRouter::ResultCode MakeTurnAnnotation(turns::IRoutingResult const & result,
   junctions.front() = result.GetStartPoint();
   junctions.back() = result.GetEndPoint();
 
-  times.push_back(Route::TTimeItem(junctions.size() - 1, estimatedTime));
-  turnsDir.emplace_back(turns::TurnItem(static_cast<uint32_t>(junctions.size()) - 1, turns::TurnDirection::ReachedYourDestination));
+  turnsDir.emplace_back(turns::TurnItem(static_cast<uint32_t>(junctions.size()) - 1, turns::CarDirection::ReachedYourDestination));
   turns::FixupTurns(junctions, turnsDir);
 
 #ifdef DEBUG
@@ -348,24 +335,7 @@ IRouter::ResultCode MakeTurnAnnotation(turns::IRoutingResult const & result,
     LOG(LDEBUG, (turns::GetTurnString(t.m_turn), ":", t.m_index, t.m_sourceName, "-",
                  t.m_targetName, "exit:", t.m_exitNum));
   }
-
-  size_t last = 0;
-  double lastTime = 0;
-  for (Route::TTimeItem & t : times)
-  {
-    double dist = 0;
-    for (size_t i = last + 1; i <= t.first; ++i)
-      dist += MercatorBounds::DistanceOnEarth(junctions[i - 1].GetPoint(), junctions[i].GetPoint());
-
-    double time = t.second - lastTime;
-
-    LOG(LDEBUG, ("distance:", dist, "start:", last, "end:", t.first, "Time:", time, "Speed:",
-                 3.6 * dist / time));
-    last = t.first;
-    lastTime = t.second;
-  }
 #endif
-  LOG(LDEBUG, ("Estimated time:", estimatedTime, "s"));
   return IRouter::ResultCode::NoError;
 }
 
@@ -405,24 +375,24 @@ void FixupTurns(vector<Junction> const & junctions, Route::TTurns & turnsDir)
   for (size_t idx = 0; idx < turnsDir.size(); )
   {
     TurnItem & t = turnsDir[idx];
-    if (roundabout && t.m_turn != TurnDirection::StayOnRoundAbout &&
-        t.m_turn != TurnDirection::LeaveRoundAbout)
+    if (roundabout && t.m_turn != CarDirection::StayOnRoundAbout &&
+        t.m_turn != CarDirection::LeaveRoundAbout)
     {
       exitNum = 0;
       roundabout = nullptr;
     }
-    else if (t.m_turn == TurnDirection::EnterRoundAbout)
+    else if (t.m_turn == CarDirection::EnterRoundAbout)
     {
       ASSERT(!roundabout, ());
       roundabout = &t;
     }
-    else if (t.m_turn == TurnDirection::StayOnRoundAbout)
+    else if (t.m_turn == CarDirection::StayOnRoundAbout)
     {
       ++exitNum;
       turnsDir.erase(turnsDir.begin() + idx);
       continue;
     }
-    else if (roundabout && t.m_turn == TurnDirection::LeaveRoundAbout)
+    else if (roundabout && t.m_turn == CarDirection::LeaveRoundAbout)
     {
       roundabout->m_exitNum = exitNum + 1; // For EnterRoundAbout turn.
       t.m_exitNum = roundabout->m_exitNum; // For LeaveRoundAbout turn.
@@ -472,7 +442,7 @@ void SelectRecommendedLanes(Route::TTurns & turnsDir)
     vector<SingleLaneInfo> & lanes = t.m_lanes;
     if (lanes.empty())
       continue;
-    TurnDirection const turn = t.m_turn;
+    CarDirection const turn = t.m_turn;
     // Checking if threre are elements in lanes which correspond with the turn exactly.
     // If so fixing up all the elements in lanes which correspond with the turn.
     if (FixupLaneSet(turn, lanes, &IsLaneWayConformedTurnDirection))
@@ -493,83 +463,83 @@ bool CheckRoundaboutExit(bool isIngoingEdgeRoundabout, bool isOutgoingEdgeRounda
   return isIngoingEdgeRoundabout && !isOutgoingEdgeRoundabout;
 }
 
-TurnDirection GetRoundaboutDirection(bool isIngoingEdgeRoundabout, bool isOutgoingEdgeRoundabout,
+CarDirection GetRoundaboutDirection(bool isIngoingEdgeRoundabout, bool isOutgoingEdgeRoundabout,
                                      bool isMultiTurnJunction, bool keepTurnByHighwayClass)
 {
   if (isIngoingEdgeRoundabout && isOutgoingEdgeRoundabout)
   {
     if (isMultiTurnJunction)
-      return keepTurnByHighwayClass ? TurnDirection::StayOnRoundAbout : TurnDirection::NoTurn;
-    return TurnDirection::NoTurn;
+      return keepTurnByHighwayClass ? CarDirection::StayOnRoundAbout : CarDirection::None;
+    return CarDirection::None;
   }
 
   if (CheckRoundaboutEntrance(isIngoingEdgeRoundabout, isOutgoingEdgeRoundabout))
-    return TurnDirection::EnterRoundAbout;
+    return CarDirection::EnterRoundAbout;
 
   if (CheckRoundaboutExit(isIngoingEdgeRoundabout, isOutgoingEdgeRoundabout))
-    return TurnDirection::LeaveRoundAbout;
+    return CarDirection::LeaveRoundAbout;
 
   ASSERT(false, ());
-  return TurnDirection::NoTurn;
+  return CarDirection::None;
 }
 
-TurnDirection InvertDirection(TurnDirection dir)
+CarDirection InvertDirection(CarDirection dir)
 {
   switch (dir)
   {
-    case TurnDirection::TurnSlightRight:
-      return TurnDirection::TurnSlightLeft;
-    case TurnDirection::TurnRight:
-      return TurnDirection::TurnLeft;
-    case TurnDirection::TurnSharpRight:
-      return TurnDirection::TurnSharpLeft;
-    case TurnDirection::TurnSlightLeft:
-      return TurnDirection::TurnSlightRight;
-    case TurnDirection::TurnLeft:
-      return TurnDirection::TurnRight;
-    case TurnDirection::TurnSharpLeft:
-      return TurnDirection::TurnSharpRight;
+    case CarDirection::TurnSlightRight:
+      return CarDirection::TurnSlightLeft;
+    case CarDirection::TurnRight:
+      return CarDirection::TurnLeft;
+    case CarDirection::TurnSharpRight:
+      return CarDirection::TurnSharpLeft;
+    case CarDirection::TurnSlightLeft:
+      return CarDirection::TurnSlightRight;
+    case CarDirection::TurnLeft:
+      return CarDirection::TurnRight;
+    case CarDirection::TurnSharpLeft:
+      return CarDirection::TurnSharpRight;
     default:
       return dir;
   };
 }
 
-TurnDirection RightmostDirection(const double angle)
+CarDirection RightmostDirection(const double angle)
 {
-  static vector<pair<double, TurnDirection>> const kLowerBounds = {
-      {157., TurnDirection::TurnSharpRight},
-      {40., TurnDirection::TurnRight},
-      {-10., TurnDirection::TurnSlightRight},
-      {-20., TurnDirection::GoStraight},
-      {-60., TurnDirection::TurnSlightLeft},
-      {-157., TurnDirection::TurnLeft},
-      {-180., TurnDirection::TurnSharpLeft}};
+  static vector<pair<double, CarDirection>> const kLowerBounds = {
+      {157., CarDirection::TurnSharpRight},
+      {40., CarDirection::TurnRight},
+      {-10., CarDirection::TurnSlightRight},
+      {-20., CarDirection::GoStraight},
+      {-60., CarDirection::TurnSlightLeft},
+      {-157., CarDirection::TurnLeft},
+      {-180., CarDirection::TurnSharpLeft}};
 
   return FindDirectionByAngle(kLowerBounds, angle);
 }
 
-TurnDirection LeftmostDirection(const double angle)
+CarDirection LeftmostDirection(const double angle)
 {
   return InvertDirection(RightmostDirection(-angle));
 }
 
-TurnDirection IntermediateDirection(const double angle)
+CarDirection IntermediateDirection(const double angle)
 {
-  static vector<pair<double, TurnDirection>> const kLowerBounds = {
-      {157., TurnDirection::TurnSharpRight},
-      {50., TurnDirection::TurnRight},
-      {10., TurnDirection::TurnSlightRight},
-      {-10., TurnDirection::GoStraight},
-      {-50., TurnDirection::TurnSlightLeft},
-      {-157., TurnDirection::TurnLeft},
-      {-180., TurnDirection::TurnSharpLeft}};
+  static vector<pair<double, CarDirection>> const kLowerBounds = {
+      {157., CarDirection::TurnSharpRight},
+      {50., CarDirection::TurnRight},
+      {10., CarDirection::TurnSlightRight},
+      {-10., CarDirection::GoStraight},
+      {-50., CarDirection::TurnSlightLeft},
+      {-157., CarDirection::TurnLeft},
+      {-180., CarDirection::TurnSharpLeft}};
 
   return FindDirectionByAngle(kLowerBounds, angle);
 }
 
 void GetTurnDirection(IRoutingResult const & result, TurnInfo & turnInfo, TurnItem & turn)
 {
-  if (!turnInfo.IsSegmentsValid())
+  if (!turnInfo.IsSegmentsValid() || turnInfo.m_ingoing.m_segmentRange.IsEmpty())
     return;
 
   ASSERT(!turnInfo.m_ingoing.m_path.empty(), ());
@@ -587,12 +557,12 @@ void GetTurnDirection(IRoutingResult const & result, TurnInfo & turnInfo, TurnIt
                                                    GetOutgoingPointIndex);
 
   double const turnAngle = my::RadToDeg(PiMinusTwoVectorsAngle(junctionPoint, ingoingPoint, outgoingPoint));
-  TurnDirection const intermediateDirection = IntermediateDirection(turnAngle);
+  CarDirection const intermediateDirection = IntermediateDirection(turnAngle);
 
   turn.m_keepAnyway = (!turnInfo.m_ingoing.m_isLink && turnInfo.m_outgoing.m_isLink);
   turn.m_sourceName = turnInfo.m_ingoing.m_name;
   turn.m_targetName = turnInfo.m_outgoing.m_name;
-  turn.m_turn = TurnDirection::NoTurn;
+  turn.m_turn = CarDirection::None;
   // Early filtering based only on the information about ingoing and outgoing edges.
   if (DiscardTurnByIngoingAndOutgoingEdges(intermediateDirection, turnInfo, turn))
     return;
@@ -601,7 +571,7 @@ void GetTurnDirection(IRoutingResult const & result, TurnInfo & turnInfo, TurnIt
   m2::PointD const ingoingPointOneSegment = turnInfo.m_ingoing.m_path[turnInfo.m_ingoing.m_path.size() - 2].GetPoint();
   TurnCandidates nodes;
   size_t ingoingCount;
-  result.GetPossibleTurns(turnInfo.m_ingoing.m_nodeId, ingoingPointOneSegment, junctionPoint,
+  result.GetPossibleTurns(turnInfo.m_ingoing.m_segmentRange, ingoingPointOneSegment, junctionPoint,
                           ingoingCount, nodes);
 
   size_t const numNodes = nodes.candidates.size();
@@ -616,9 +586,9 @@ void GetTurnDirection(IRoutingResult const & result, TurnInfo & turnInfo, TurnIt
   }
   else
   {
-    if (nodes.candidates.front().m_nodeId == turnInfo.m_outgoing.m_nodeId)
+    if (nodes.candidates.front().m_segmentRange == turnInfo.m_outgoing.m_segmentRange)
       turn.m_turn = LeftmostDirection(turnAngle);
-    else if (nodes.candidates.back().m_nodeId == turnInfo.m_outgoing.m_nodeId)
+    else if (nodes.candidates.back().m_segmentRange == turnInfo.m_outgoing.m_segmentRange)
       turn.m_turn = RightmostDirection(turnAngle);
     else
       turn.m_turn = intermediateDirection;
@@ -637,7 +607,7 @@ void GetTurnDirection(IRoutingResult const & result, TurnInfo & turnInfo, TurnIt
   bool const keepTurnByHighwayClass = KeepTurnByHighwayClass(turn.m_turn, nodes, turnInfo);
   if (!turn.m_keepAnyway && !keepTurnByHighwayClass)
   {
-    turn.m_turn = TurnDirection::NoTurn;
+    turn.m_turn = CarDirection::None;
     return;
   }
 
@@ -648,14 +618,14 @@ void GetTurnDirection(IRoutingResult const & result, TurnInfo & turnInfo, TurnIt
   if (!KeepTurnByIngoingEdges(junctionPoint, notSoCloseToTheTurnPoint, outgoingPoint, hasMultiTurns,
                               nodes.candidates.size() + ingoingCount))
   {
-    turn.m_turn = TurnDirection::NoTurn;
+    turn.m_turn = CarDirection::None;
     return;
   }
 
-  if (turn.m_turn == TurnDirection::GoStraight)
+  if (turn.m_turn == CarDirection::GoStraight)
   {
     if (!hasMultiTurns)
-      turn.m_turn = TurnDirection::NoTurn;
+      turn.m_turn = CarDirection::None;
     return;
   }
 }
@@ -697,7 +667,7 @@ size_t CheckUTurnOnRoute(TUnpackedPathSegments const & segments,
         // We decided to add driving rules (left-right sided driving) to mwm header.
         if (path[path.size() - 2] == checkedSegment.m_path[1])
         {
-          turn.m_turn = TurnDirection::UTurnLeft;
+          turn.m_turn = CarDirection::UTurnLeft;
           return 1;
         }
         // Wide UTurn must have link in it's middle.
@@ -729,9 +699,9 @@ size_t CheckUTurnOnRoute(TUnpackedPathSegments const & segments,
                                                        kMaxPointsCount, kMinDistMeters,
                                                        GetOutgoingPointIndex);
       if (PiMinusTwoVectorsAngle(junctionPoint, ingoingPoint, outgoingPoint) < 0)
-        turn.m_turn = TurnDirection::UTurnLeft;
+        turn.m_turn = CarDirection::UTurnLeft;
       else
-        turn.m_turn = TurnDirection::UTurnRight;
+        turn.m_turn = CarDirection::UTurnRight;
       return i + 1;
     }
   }

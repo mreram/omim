@@ -19,6 +19,12 @@ data/[!W]*.mwm
 data/local_ads*.dat
 data/local_ads_*/*.*
 data/shaders_compiler/*
+data/styles/*/*/out/*
+data/resources-*_design/*
+data/drules_proto_design.bin
+data/colors_design.txt
+data/patterns_design.txt
+data/route_points.dat
 
 # Compiled Python
 *.pyc
@@ -53,7 +59,6 @@ out/*
 qt/mapswithme.log
 
 # XCode
-iphone/*/*.xcodeproj/*.mode1v3
 iphone/*/*.xcodeproj/*.pbxuser
 iphone/*/*.xcodeproj/*.perspectivev3
 iphone/*/*.xcodeproj/project.xcworkspace/*
@@ -62,6 +67,12 @@ tools/emacsmode/build
 **/DerivedData/*
 **/xcshareddata
 **/xcuserdata
+**/xcschemes
+iphone/**/*.moved-aside
+iphone/**/*.swp
+iphone/**/*.mode1v3
+iphone/**/*.mode2v3
+iphone/**/*.perspectivev3
 
 # Carthage
 iphone/Maps/3party/Carthage/Checkouts
@@ -154,3 +165,7 @@ server
 *.autosave
 
 cmake-build-*
+
+qt/res/Info.plist
+
+designer_version.h

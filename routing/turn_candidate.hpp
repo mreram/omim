@@ -2,7 +2,9 @@
 
 #include "routing/turns.hpp"
 
-#include "std/vector.hpp"
+#include "base/math.hpp"
+
+#include <vector>
 
 namespace ftypes
 {
@@ -26,30 +28,54 @@ struct TurnCandidate
    */
   double angle;
   /*!
-   * |m_nodeId| is a possible node (a possible way) from the juction.
-   * |m_nodeId| contain either only unique NodeID for OSRM case or mwm id, feature id, segment id
-   * and direction in case of A*.
+   * |m_segmentRange| is a possible way from the junction.
+   * |m_segmentRange| contains mwm id, feature id, segment id and direction in case of A*.
    */
-  UniNodeId m_nodeId;
+  SegmentRange m_segmentRange;
   /*!
    * \brief highwayClass field for the road class caching. Because feature reading is a long
    * function.
    */
   ftypes::HighwayClass highwayClass;
 
-  TurnCandidate(double a, UniNodeId const & n, ftypes::HighwayClass c)
-    : angle(a), m_nodeId(n), highwayClass(c)
+  TurnCandidate(double a, SegmentRange const & segmentRange, ftypes::HighwayClass c)
+    : angle(a), m_segmentRange(segmentRange), highwayClass(c)
   {
+  }
+
+  bool IsAlmostEqual(TurnCandidate const & rhs) const
+  {
+    double constexpr kEpsilon = 0.01;
+    return my::AlmostEqualAbs(angle, rhs.angle, kEpsilon) && m_segmentRange == rhs.m_segmentRange &&
+           highwayClass == rhs.highwayClass;
   }
 };
 
+inline bool IsAlmostEqual(std::vector<TurnCandidate> const & lhs, std::vector<TurnCandidate> const & rhs)
+{
+  if (lhs.size() != rhs.size())
+    return false;
+
+  for (size_t i = 0; i < lhs.size(); ++i)
+  {
+    if (!lhs[i].IsAlmostEqual(rhs[i]))
+      return false;
+  }
+  return true;
+}
+
 struct TurnCandidates
 {
-  vector<TurnCandidate> candidates;
+  std::vector<TurnCandidate> candidates;
   bool isCandidatesAngleValid;
 
   explicit TurnCandidates(bool angleValid = true) : isCandidatesAngleValid(angleValid) {}
-};
 
+  bool IsAlmostEqual(TurnCandidates const & rhs) const
+  {
+    return turns::IsAlmostEqual(candidates, rhs.candidates) &&
+           isCandidatesAngleValid == rhs.isCandidatesAngleValid;
+  }
+};
 }  // namespace routing
 }  // namespace turns

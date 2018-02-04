@@ -47,6 +47,7 @@ public:
   };
 
   GlyphVisualParams const & GetGlyphVisualParams() const;
+  bool IsSdfPrefered() const;
   uint32_t GetGlyphSdfScale() const;
   uint32_t GetGlyphBaseSize() const;
   double GetFontScale() const;
@@ -85,6 +86,9 @@ m2::RectD GetRectForDrawScale(double drawScale, m2::PointD const & center);
 uint32_t CalculateTileSize(uint32_t screenWidth, uint32_t screenHeight);
 
 double GetZoomLevel(double scale);
+void ExtractZoomFactors(ScreenBase const & s, double & zoom, int & index, float & lerpCoef);
+float InterpolateByZoomLevels(int index, float lerpCoef, std::vector<float> const & values);
+m2::PointF InterpolateByZoomLevels(int index, float lerpCoef, std::vector<m2::PointF> const & values);
 double GetNormalizedZoomLevel(double scale, int minZoom = 1);
 double GetScale(double zoomLevel);
 

@@ -1,7 +1,8 @@
-#include "routing/road_graph.hpp"
 #include "routing/routing_algorithm.hpp"
+
 #include "routing/base/astar_algorithm.hpp"
 #include "routing/base/astar_progress.hpp"
+#include "routing/road_graph.hpp"
 
 #include "base/assert.hpp"
 
@@ -12,6 +13,7 @@ namespace routing
 
 namespace
 {
+uint32_t constexpr kVisitPeriod = 4;
 float constexpr kProgressInterval = 2;
 
 double constexpr KMPH2MPS = 1000.0 / (60 * 60);
@@ -47,8 +49,9 @@ private:
 class RoadGraph
 {
 public:
-  using TVertexType = Junction;
-  using TEdgeType = WeightedEdge;
+  using Vertex = Junction;
+  using Edge = WeightedEdge;
+  using Weight = double;
 
   RoadGraph(IRoadGraph const & roadGraph)
     : m_roadGraph(roadGraph)
@@ -134,13 +137,15 @@ IRoutingAlgorithm::Result AStarRoutingAlgorithm::CalculateRoute(IRoadGraph const
                                                                 Junction const & startPos,
                                                                 Junction const & finalPos,
                                                                 RouterDelegate const & delegate,
-                                                                RoutingResult<Junction> & path)
+                                                                RoutingResult<IRoadGraph::Vertex, IRoadGraph::Weight> & path)
 {
-  AStarProgress progress(0, 100);
+  AStarProgress progress(0, 95);
+  uint32_t visitCount = 0;
 
-  function<void(Junction const &, Junction const &)> onVisitJunctionFn =
-      [&delegate, &progress](Junction const & junction, Junction const & /* target */)
-  {
+  auto onVisitJunctionFn = [&](Junction const & junction, Junction const & /* target */) {
+    if (++visitCount % kVisitPeriod != 0)
+      return;
+
     delegate.OnPointCheck(junction.GetPoint());
     auto const lastValue = progress.GetLastValue();
     auto const newValue = progress.GetProgressForDirectedAlgo(junction.GetPoint());
@@ -152,8 +157,9 @@ IRoutingAlgorithm::Result AStarRoutingAlgorithm::CalculateRoute(IRoadGraph const
   my::Cancellable const & cancellable = delegate;
   progress.Initialize(startPos.GetPoint(), finalPos.GetPoint());
   RoadGraph roadGraph(graph);
-  TAlgorithmImpl::Result const res = TAlgorithmImpl().FindPath(
-      roadGraph, startPos, finalPos, path, cancellable, onVisitJunctionFn);
+  TAlgorithmImpl::Params params(roadGraph, startPos, finalPos, nullptr /* prevRoute */, cancellable,
+                                onVisitJunctionFn, {} /* checkLength */);
+  TAlgorithmImpl::Result const res = TAlgorithmImpl().FindPath(params, path);
   return Convert(res);
 }
 
@@ -161,13 +167,15 @@ IRoutingAlgorithm::Result AStarRoutingAlgorithm::CalculateRoute(IRoadGraph const
 
 IRoutingAlgorithm::Result AStarBidirectionalRoutingAlgorithm::CalculateRoute(
     IRoadGraph const & graph, Junction const & startPos, Junction const & finalPos,
-    RouterDelegate const & delegate, RoutingResult<Junction> & path)
+    RouterDelegate const & delegate, RoutingResult<IRoadGraph::Vertex, IRoadGraph::Weight> & path)
 {
-  AStarProgress progress(0, 100);
+  AStarProgress progress(0, 95);
+  uint32_t visitCount = 0;
 
-  function<void(Junction const &, Junction const &)> onVisitJunctionFn =
-      [&delegate, &progress](Junction const & junction, Junction const & target)
-  {
+  auto onVisitJunctionFn = [&](Junction const & junction, Junction const & target) {
+    if (++visitCount % kVisitPeriod != 0)
+      return;
+
     delegate.OnPointCheck(junction.GetPoint());
     auto const lastValue = progress.GetLastValue();
     auto const newValue =
@@ -179,8 +187,9 @@ IRoutingAlgorithm::Result AStarBidirectionalRoutingAlgorithm::CalculateRoute(
   my::Cancellable const & cancellable = delegate;
   progress.Initialize(startPos.GetPoint(), finalPos.GetPoint());
   RoadGraph roadGraph(graph);
-  TAlgorithmImpl::Result const res = TAlgorithmImpl().FindPathBidirectional(
-      roadGraph, startPos, finalPos, path, cancellable, onVisitJunctionFn);
+  TAlgorithmImpl::Params params(roadGraph, startPos, finalPos, {} /* prevRoute */, cancellable,
+                                onVisitJunctionFn, {} /* checkLength */);
+  TAlgorithmImpl::Result const res = TAlgorithmImpl().FindPathBidirectional(params, path);
   return Convert(res);
 }
 

@@ -1,5 +1,6 @@
 #include "search/search_quality/assessment_tool/results_view.hpp"
 
+#include "search/result.hpp"
 #include "search/search_quality/assessment_tool/result_view.hpp"
 
 #include "base/assert.hpp"
@@ -22,6 +23,8 @@ ResultsView::ResultsView(QWidget & parent) : QListWidget(&parent) { setAlternati
 void ResultsView::Add(search::Result const & result)
 {
   AddImpl(result, false /* hidden */);
+  if (result.HasPoint())
+    m_hasResultsWithPoints = true;
 }
 
 void ResultsView::Add(search::Sample::Result const & result, Edits::Entry const & entry)
@@ -57,6 +60,12 @@ void ResultsView::Update(Edits::Update const & update)
       result->Update();
     break;
   }
+  case Edits::Update::Type::Add:
+  {
+    CHECK_LESS(update.m_index, m_results.size(), ());
+    m_results[update.m_index]->Update();
+    break;
+  }
   case Edits::Update::Type::Delete:
   {
     auto const index = update.m_index;
@@ -64,12 +73,18 @@ void ResultsView::Update(Edits::Update const & update)
     item(static_cast<int>(index))->setHidden(true);
     break;
   }
+  case Edits::Update::Type::Resurrect:
+    auto const index = update.m_index;
+    CHECK_LESS(index, Size(), ());
+    item(static_cast<int>(index))->setHidden(false);
+    break;
   };
 }
 
 void ResultsView::Clear()
 {
   m_results.clear();
+  m_hasResultsWithPoints = false;
   clear();
 }
 

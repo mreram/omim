@@ -12,9 +12,9 @@ PRIVATE_PUSHWOOSH_PROPERTIES="$BASE_PATH/android/pushwoosh.properties"
 SAVED_PRIVATE_REPO_FILE="$BASE_PATH/.private_repository_url"
 TMP_REPO_DIR="$BASE_PATH/.tmp.private.repo"
 
-if [ ! -f "$BASE_PATH/omim.pro" ]; then
+if [ "$(git rev-parse --show-toplevel)" != "$(pwd -P)" ]; then
   echo "Please run this script from the root repository folder."
-  exit -1
+  exit 1
 fi
 
 if [ -f "$SAVED_PRIVATE_REPO_FILE" ]; then
@@ -32,6 +32,8 @@ else
 
 #define ALOHALYTICS_URL ""
 #define FLURRY_KEY "12345678901234567890"
+#define APPSFLYER_KEY ""
+#define APPSFLYER_APP_ID_IOS ""
 #define MY_TRACKER_KEY ""
 #define MY_TARGET_KEY 0
 #define MY_TARGET_RB_KEY 0
@@ -42,6 +44,7 @@ else
 #define OSRM_ONLINE_SERVER_URL ""
 #define RESOURCES_METASERVER_URL ""
 #define METASERVER_URL ""
+#define DIFF_LIST_URL ""
 #define DEFAULT_URLS_JSON ""
 #define AD_PERMISION_SERVER_URL ""
 #define AD_PERMISION_CHECK_DURATION 2 * 60 * 60
@@ -62,6 +65,45 @@ else
 #define LOCAL_ADS_SERVER_URL ""
 #define LOCAL_ADS_STATISTICS_SERVER_URL ""
 #define LOCAL_ADS_COMPANY_PAGE_URL ""
+#define VIATOR_API_KEY_EN ""
+#define VIATOR_API_KEY_DE ""
+#define VIATOR_API_KEY_FR ""
+#define VIATOR_API_KEY_ES ""
+#define VIATOR_API_KEY_PT ""
+#define VIATOR_API_KEY_IT ""
+#define VIATOR_API_KEY_NL ""
+#define VIATOR_API_KEY_SV ""
+#define VIATOR_API_KEY_JA ""
+#define VIATOR_ACCOUNT_ID_EN ""
+#define VIATOR_ACCOUNT_ID_DE ""
+#define VIATOR_ACCOUNT_ID_FR ""
+#define VIATOR_ACCOUNT_ID_ES ""
+#define VIATOR_ACCOUNT_ID_PT ""
+#define VIATOR_ACCOUNT_ID_IT ""
+#define VIATOR_ACCOUNT_ID_NL ""
+#define VIATOR_ACCOUNT_ID_SV ""
+#define VIATOR_ACCOUNT_ID_JA ""
+#define YANDEX_CLIENT_ID ""
+#define YANDEX_API_KEY ""
+#define YANDEX_TRACKING_ID ""
+#define LOCALS_API_KEY ""
+#define LOCALS_API_URL ""
+#define LOCALS_PAGE_URL ""
+#define PASSPORT_URL ""
+#define PASSPORT_APP_NAME ""
+#define UGC_URL ""
+#define MAX_PARTNERS_COUNT 0
+#define PARTNER1_NAME ""
+#define PARTNER1_BANNER_PLACEMENT_ID ""
+#define PARTNER2_NAME ""
+#define PARTNER2_BANNER_PLACEMENT_ID ""
+#define PARTNER3_NAME ""
+#define PARTNER3_BANNER_PLACEMENT_ID ""
+#define PARTNER4_NAME ""
+#define PARTNER4_BANNER_PLACEMENT_ID ""
+#define PARTNER5_NAME ""
+#define PARTNER5_BANNER_PLACEMENT_ID ""
+
 ' > "$PRIVATE_HEADER"
     echo 'ext {
   spropStoreFile = "../tools/android/debug.keystore"

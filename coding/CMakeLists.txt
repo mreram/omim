@@ -17,12 +17,15 @@ set(
   base64.hpp
   bit_streams.hpp
   buffer_reader.hpp
+  bwt_coder.hpp
   byte_stream.hpp
   coder.hpp
   coder_util.hpp
   compressed_bit_vector.cpp
   compressed_bit_vector.hpp
   constants.hpp
+  csv_reader.cpp
+  csv_reader.hpp
   dd_vector.hpp
   diff.hpp
   diff_patch_common.hpp
@@ -71,6 +74,7 @@ set(
   streams_common.hpp
   streams_sink.hpp
   succinct_mapper.hpp
+  text_storage.hpp
   traffic.cpp
   traffic.hpp
   transliteration.cpp

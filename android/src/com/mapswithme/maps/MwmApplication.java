@@ -13,9 +13,7 @@ import android.support.multidex.MultiDex;
 import android.text.TextUtils;
 import android.util.Log;
 
-import java.io.File;
-import java.util.List;
-
+import com.appsflyer.AppsFlyerLib;
 import com.crashlytics.android.Crashlytics;
 import com.crashlytics.android.ndk.CrashlyticsNdk;
 import com.mapswithme.maps.background.AppBackgroundTracker;
@@ -30,9 +28,13 @@ import com.mapswithme.maps.routing.RoutingController;
 import com.mapswithme.maps.settings.StoragePathManager;
 import com.mapswithme.maps.sound.TtsPlayer;
 import com.mapswithme.maps.traffic.TrafficManager;
+import com.mapswithme.maps.ugc.UGC;
 import com.mapswithme.util.Config;
 import com.mapswithme.util.Constants;
 import com.mapswithme.util.Counters;
+import com.mapswithme.util.CrashlyticsUtils;
+import com.mapswithme.util.PermissionsUtils;
+import com.mapswithme.util.SharedPropertiesUtils;
 import com.mapswithme.util.ThemeSwitcher;
 import com.mapswithme.util.UiUtils;
 import com.mapswithme.util.Utils;
@@ -45,6 +47,9 @@ import com.my.tracker.MyTrackerParams;
 import com.pushwoosh.PushManager;
 import io.fabric.sdk.android.Fabric;
 
+import java.io.File;
+import java.util.List;
+
 public class MwmApplication extends Application
 {
   private Logger mLogger;
@@ -56,8 +61,9 @@ public class MwmApplication extends Application
   private SharedPreferences mPrefs;
   private AppBackgroundTracker mBackgroundTracker;
 
-  private boolean mIsFrameworkInitialized;
-  private boolean mIsPlatformInitialized;
+  private boolean mFrameworkInitialized;
+  private boolean mPlatformInitialized;
+  private boolean mCrashlyticsInitialized;
 
   private Handler mMainLoopHandler;
   private final Object mMainQueueToken = new Object();
@@ -98,6 +104,17 @@ public class MwmApplication extends Application
             Log.i(TAG, "The app goes to background. All logs are going to be zipped.");
             LoggerFactory.INSTANCE.zipLogs(null);
           }
+        }
+      };
+
+  @NonNull
+  private final AppBackgroundTracker.OnVisibleAppLaunchListener mVisibleAppLaunchListener =
+      new AppBackgroundTracker.OnVisibleAppLaunchListener()
+      {
+        @Override
+        public void onVisibleAppLaunch()
+        {
+          Statistics.INSTANCE.trackColdStartupInfo();
         }
       };
 
@@ -146,17 +163,39 @@ public class MwmApplication extends Application
     mLogger.d(TAG, "Application is created");
     mMainLoopHandler = new Handler(getMainLooper());
 
-    initCrashlytics();
-
-    initPushWoosh();
+    initCoreIndependentSdks();
 
     mPrefs = getSharedPreferences(getString(R.string.pref_file_name), MODE_PRIVATE);
     mBackgroundTracker = new AppBackgroundTracker();
+    mBackgroundTracker.addListener(mVisibleAppLaunchListener);
   }
 
-  public void initNativePlatform()
+  private void initCoreIndependentSdks()
   {
-    if (mIsPlatformInitialized)
+    initCrashlytics();
+    initPushWoosh();
+    initAppsFlyer();
+  }
+
+  /**
+   * Initialize native core of application: platform and framework. Caller must handle returned value
+   * and do nothing with native code if initialization is failed.
+   *
+   * @return boolean - indicator whether native initialization is successful or not.
+   */
+  public boolean initCore()
+  {
+    initNativePlatform();
+    if (!mPlatformInitialized)
+      return false;
+
+    initNativeFramework();
+    return mFrameworkInitialized;
+  }
+
+  private void initNativePlatform()
+  {
+    if (mPlatformInitialized)
       return;
 
     final boolean isInstallationIdFound = setInstallationIdToCrashlytics();
@@ -167,29 +206,63 @@ public class MwmApplication extends Application
     mLogger.d(TAG, "onCreate(), setting path = " + settingsPath);
     String tempPath = getTempPath();
     mLogger.d(TAG, "onCreate(), temp path = " + tempPath);
-    new File(settingsPath).mkdirs();
-    new File(tempPath).mkdirs();
+
+    // If platform directories are not created it means that native part of app will not be able
+    // to work at all. So, we just ignore native part initialization in this case, e.g. when the
+    // external storage is damaged or not available (read-only).
+    if (!createPlatformDirectories(settingsPath, tempPath))
+      return;
 
     // First we need initialize paths and platform to have access to settings and other components.
     nativePreparePlatform(settingsPath);
     nativeInitPlatform(getApkPath(), getStoragePath(settingsPath), getTempPath(), getObbGooglePath(),
                        BuildConfig.FLAVOR, BuildConfig.BUILD_TYPE, UiUtils.isTablet());
 
+    Config.setStatisticsEnabled(SharedPropertiesUtils.isStatisticsEnabled());
+
+    @SuppressWarnings("unused")
     Statistics s = Statistics.INSTANCE;
 
     if (!isInstallationIdFound)
       setInstallationIdToCrashlytics();
 
-    mBackgroundTracker = new AppBackgroundTracker();
     mBackgroundTracker.addListener(mBackgroundListener);
     TrackRecorder.init();
     Editor.init();
-    mIsPlatformInitialized = true;
+    UGC.init();
+    mPlatformInitialized = true;
   }
 
-  public void initNativeCore()
+  private boolean createPlatformDirectories(@NonNull String settingsPath, @NonNull String tempPath)
   {
-    if (mIsFrameworkInitialized)
+    if (SharedPropertiesUtils.shouldEmulateBadExternalStorage())
+      return false;
+
+    return createPlatformDirectory(settingsPath) && createPlatformDirectory(tempPath);
+  }
+
+  private boolean createPlatformDirectory(@NonNull String path)
+  {
+    File directory = new File(path);
+    if (!directory.exists() && !directory.mkdirs())
+    {
+      boolean isPermissionGranted = PermissionsUtils.isExternalStorageGranted();
+      Throwable error = new IllegalStateException("Can't create directories for: " + path
+                                                  + " state = " + Environment.getExternalStorageState()
+                                                  + " isPermissionGranted = " + isPermissionGranted);
+      LoggerFactory.INSTANCE.getLogger(LoggerFactory.Type.STORAGE)
+                            .e(TAG, "Can't create directories for: " + path
+                                    + " state = " + Environment.getExternalStorageState()
+                                    + " isPermissionGranted = " + isPermissionGranted);
+      CrashlyticsUtils.logException(error);
+      return false;
+    }
+    return true;
+  }
+
+  private void initNativeFramework()
+  {
+    if (mFrameworkInitialized)
       return;
 
     nativeInitFramework();
@@ -203,7 +276,7 @@ public class MwmApplication extends Application
     LocationHelper.INSTANCE.initialize();
     RoutingController.get().initialize();
     TrafficManager.INSTANCE.initialize();
-    mIsFrameworkInitialized = true;
+    mFrameworkInitialized = true;
   }
 
   private void initNativeStrings()
@@ -232,14 +305,24 @@ public class MwmApplication extends Application
     nativeAddLocalization("place_page_booking_rating", getString(R.string.place_page_booking_rating));
   }
 
-  private void initCrashlytics()
+  public void initCrashlytics()
   {
     if (!isCrashlyticsEnabled())
+      return;
+
+    if (isCrashlyticsInitialized())
       return;
 
     Fabric.with(this, new Crashlytics(), new CrashlyticsNdk());
 
     nativeInitCrashlytics();
+
+    mCrashlyticsInitialized = true;
+  }
+
+  public boolean isCrashlyticsInitialized()
+  {
+    return mCrashlyticsInitialized;
   }
 
   private static boolean setInstallationIdToCrashlytics()
@@ -257,13 +340,9 @@ public class MwmApplication extends Application
     return true;
   }
 
-  public boolean isFrameworkInitialized()
+  public boolean arePlatformAndCoreInitialized()
   {
-    return mIsFrameworkInitialized;
-  }
-  public boolean isPlatformInitialized()
-  {
-    return mIsPlatformInitialized;
+    return mFrameworkInitialized && mPlatformInitialized;
   }
 
   public String getApkPath()
@@ -342,6 +421,17 @@ public class MwmApplication extends Application
     }
   }
 
+  private void initAppsFlyer()
+  {
+    // There is no necessary to use a conversion data listener for a while.
+    // When it's needed keep in mind that the core can't be used from the mentioned listener unless
+    // the AppsFlyer sdk initializes after core initialization.
+    AppsFlyerLib.getInstance().init(PrivateVariables.appsFlyerKey(),
+                                    null /* conversionDataListener */);
+    AppsFlyerLib.getInstance().setDebugLog(BuildConfig.DEBUG);
+    AppsFlyerLib.getInstance().startTracking(this);
+  }
+
   @SuppressWarnings("unused")
   void sendPushWooshTags(String tag, String[] values)
   {
@@ -373,14 +463,14 @@ public class MwmApplication extends Application
   }
 
   @SuppressWarnings("unused")
-  void forwardToMainThread(final long functorPointer)
+  void forwardToMainThread(final long taskPointer)
   {
     Message m = Message.obtain(mMainLoopHandler, new Runnable()
     {
       @Override
       public void run()
       {
-        nativeProcessFunctor(functorPointer);
+        nativeProcessTask(taskPointer);
       }
     });
     m.obj = mMainQueueToken;
@@ -392,7 +482,7 @@ public class MwmApplication extends Application
                                          String flavorName, String buildType, boolean isTablet);
 
   private static native void nativeInitFramework();
-  private static native void nativeProcessFunctor(long functorPointer);
+  private static native void nativeProcessTask(long taskPointer);
   private static native void nativeAddLocalization(String name, String value);
 
   @UiThread

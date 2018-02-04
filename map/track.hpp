@@ -34,21 +34,24 @@ public:
 
   explicit Track(PolylineD const & polyline, Params const & p);
 
+  bool IsDirty() const override { return m_isDirty; }
+  void AcceptChanges() const override { m_isDirty = false; }
+
   string const & GetName() const;
   PolylineD const & GetPolyline() const { return m_polyline; }
   m2::RectD GetLimitRect() const;
   double GetLengthMeters() const;
 
+  int GetMinZoom() const override { return 1; }
+  df::RenderState::DepthLayer GetDepthLayer() const override;
   size_t GetLayerCount() const override;
   dp::Color const & GetColor(size_t layerIndex) const override;
   float GetWidth(size_t layerIndex) const override;
-  float GetLayerDepth(size_t layerIndex) const override;
-
-  /// Line geometry enumeration
-  size_t GetPointCount() const override;
-  m2::PointD const & GetPoint(size_t pointIndex) const override;
+  float GetDepth(size_t layerIndex) const override;
+  std::vector<m2::PointD> const & GetPoints() const override;
 
 private:
   PolylineD m_polyline;
   Params m_params;
+  mutable bool m_isDirty = true;
 };

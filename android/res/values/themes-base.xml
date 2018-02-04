@@ -39,9 +39,6 @@
     <item name="ppPreviewHeadOpen">@drawable/bg_place_page_head_open</item>
     <item name="ppPreviewHeadClosed">@drawable/bg_place_page_head_closed</item>
 
-    <item name="routingSlot">@drawable/routing_slot_background</item>
-    <item name="routingSlotPressed">@drawable/routing_slot_background_pressed</item>
-    <item name="routingSlotMarker">@drawable/routing_slot_marker</item>
     <item name="navNextTurnFrame">@drawable/bg_nav_next_turn</item>
     <item name="navNextNextTurnFrame">@drawable/bg_nav_next_next_turn</item>
 
@@ -60,6 +57,7 @@
     <item name="redButtonTextColorDisabled">@color/button_red_text_disabled</item>
 
     <item name="startButtonBackground">@drawable/button_start</item>
+    <item name="reviewButtonBackground">@drawable/button_leave_review</item>
 
     <item name="circleAccent">@drawable/circle_accent</item>
 
@@ -104,6 +102,22 @@
     <item name="preferenceTheme">@style/PreferenceThemeOverlay.v14.Material</item>
 
     <item name="tagBackground">@drawable/bg_tag</item>
+
+    <item name="sponsoredGalleryMore">@drawable/ic_sponsored_gallery_more</item>
+    <item name="luggageLogo">@drawable/logo_luggagehero_light</item>
+    <item name="viatorLogo">@drawable/ic_logo_viator_light</item>
+
+    <item name="ratingButtonBackground">@drawable/bg_rating_button</item>
+
+    <item name="android:listDivider">@drawable/list_divider</item>
+
+    <!-- if don't override this attribute the app will be crashed on start on Android 4.xx,
+      because on old prelolipop devices vector drawables don't work correctly -->
+    <item name="homeAsUpIndicator">@drawable/abc_ic_ab_back_mtrl_am_alpha</item>
+
+    <item name="transitPedestrianBackground">@color/black_4</item>
+    <item name="transitStepDivider">@drawable/dot_divider</item>
+    <item name="filterPropertyBackground">@drawable/button_with_border</item>
   </style>
 
   <!-- Night theme -->
@@ -146,9 +160,6 @@
     <item name="ppPreviewHeadOpen">@drawable/bg_place_page_head_open_night</item>
     <item name="ppPreviewHeadClosed">@drawable/bg_place_page_head_closed_night</item>
 
-    <item name="routingSlot">@drawable/routing_slot_background_night</item>
-    <item name="routingSlotPressed">@drawable/routing_slot_background_pressed_night</item>
-    <item name="routingSlotMarker">@drawable/routing_slot_marker_night</item>
     <item name="navNextTurnFrame">@drawable/bg_nav_next_turn_night</item>
     <item name="navNextNextTurnFrame">@drawable/bg_nav_next_next_turn_night</item>
 
@@ -167,6 +178,7 @@
     <item name="redButtonTextColorDisabled">@color/button_red_text_disabled</item>
 
     <item name="startButtonBackground">@drawable/button_start_night</item>
+    <item name="reviewButtonBackground">@drawable/button_leave_review_night</item>
 
     <item name="circleAccent">@drawable/circle_accent_night</item>
 
@@ -210,5 +222,19 @@
     <item name="localAdSearchResBackground">@color/search_local_ads_customer_result_night</item>
 
     <item name="tagBackground">@drawable/bg_tag_night</item>
+
+    <item name="sponsoredGalleryMore">@drawable/ic_sponsored_gallery_more_night</item>
+    <item name="luggageLogo">@drawable/logo_luggagehero_dark</item>
+    <item name="viatorLogo">@drawable/ic_logo_viator_dark</item>
+
+    <item name="ratingButtonBackground">@drawable/bg_rating_button_night</item>
+
+    <!-- if don't override this attribute the app will be crashed on start on Android 4.xx,
+      because on old prelolipop devices vector drawables don't work correctly -->
+    <item name="homeAsUpIndicator">@drawable/abc_ic_ab_back_mtrl_am_alpha</item>
+
+    <item name="transitPedestrianBackground">@color/white_4</item>
+    <item name="transitStepDivider">@drawable/dot_divider_night</item>
+    <item name="filterPropertyBackground">@drawable/button_with_border_night</item>
   </style>
 </resources>

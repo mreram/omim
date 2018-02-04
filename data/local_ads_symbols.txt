@@ -62,9 +62,17 @@
 06038_car_shop-l
 06039_motorcycle_shop-l
 06040_travel_agency_shop-l
+06041_stationery_shop-l
+06042_newsagent-l
+06043_ice_cream-l
+06044_funeral_directors-l
+06045_media-l
+06046_music-l
+06047_erotic-l
 07001_atm-l
 07002_bank-l
 07003_banknote-l
+07004_office-financial-l
 08001_fuel-l
 08002_charging-station-l
 08003_car-repair-l
@@ -91,6 +99,7 @@
 09017_climbing-l
 09018_gym-l
 09019_equestrian-l
+09020_theme_park-l
 10001_kindergarten-l
 10002_school-l
 10003_college-l
@@ -115,3 +124,5 @@
 10032_cemetery-l
 10033_beach-l
 10034_dog_park-l
+10035_home-l
+10036_vending-l

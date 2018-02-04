@@ -6,7 +6,7 @@
 #import "Statistics.h"
 #import "UIButton+RuntimeAttributes.h"
 
-#include <vector>
+#include <unordered_set>
 
 namespace
 {
@@ -33,6 +33,8 @@ enum class State
 @property(weak, nonatomic) IBOutlet UIButton * primaryButton;
 @property(weak, nonatomic) IBOutlet UIButton * secondaryButton;
 @property(weak, nonatomic) IBOutlet UIView * spinnerView;
+@property(weak, nonatomic) IBOutlet UILabel * progressLabel;
+@property(weak, nonatomic) IBOutlet UILabel * legendLabel;
 
 @property(weak, nonatomic) id<MWMCircularProgressProtocol> delegate;
 
@@ -42,7 +44,7 @@ enum class State
 
 - (void)startSpinner;
 - (void)stopSpinner;
-- (void)setProgress:(CGFloat)progress;
+- (void)setProgress:(MapFilesDownloader::TProgress)progress nodeName:(NSString *)nodeName;
 - (void)updateForSize:(CGSize)size;
 
 @end
@@ -68,7 +70,7 @@ enum class State
   self.state = State::Downloading;
   self.primaryButton.hidden = YES;
   [self startSpinner];
-  self.secondaryButton.localizedText = L(@"cancel");
+  self.secondaryButton.localizedText = L(@"downloader_hide_screen");
   [MWMStorage updateNode:RootId()];
 }
 
@@ -87,6 +89,8 @@ enum class State
 {
   self.primaryButton.hidden = YES;
   self.spinnerView.hidden = NO;
+  self.progressLabel.hidden = NO;
+  self.legendLabel.hidden = NO;
   self.spinner = [MWMCircularProgress downloaderProgressForParentView:self.spinnerView];
   self.spinner.delegate = self.delegate;
   [self.spinner setInvertColor:YES];
@@ -97,21 +101,45 @@ enum class State
 {
   self.primaryButton.hidden = NO;
   self.spinnerView.hidden = YES;
+  self.progressLabel.hidden = YES;
+  self.legendLabel.hidden = YES;
   self.spinner = nil;
 }
 
-- (void)setProgress:(CGFloat)progress
+- (void)setProgress:(MapFilesDownloader::TProgress)progress nodeName:(NSString *)nodeName
 {
-  self.spinner.progress = progress;
+  CGFloat const prog = kMaxProgress * static_cast<CGFloat>(progress.first) / progress.second;
+  self.spinner.progress = prog;
+  NSString * downloader_percent =
+      [L(@"downloader_percent") stringByReplacingOccurrencesOfString:@"%s" withString:@"%@"];
+  NSNumberFormatter * numberFormatter = [[NSNumberFormatter alloc] init];
+  [numberFormatter setNumberStyle:NSNumberFormatterPercentStyle];
+  [numberFormatter setMaximumFractionDigits:0];
+  [numberFormatter setMultiplier:@100];
+  NSString * percentString = [numberFormatter stringFromNumber:@(prog)];
+  NSString * sizeString = formattedSize(progress.second);
+  NSString * progressLabel =
+      [NSString stringWithFormat:downloader_percent, percentString, sizeString];
+  self.progressLabel.text = progressLabel;
+
+  NSString * downloader_process =
+      [L(@"downloader_process") stringByReplacingOccurrencesOfString:@"%s" withString:@"%@"];
+  NSString * legendLabel = [NSString stringWithFormat:downloader_process, nodeName];
+  ;
+  self.legendLabel.text = legendLabel;
 }
 
 @end
 
 @interface MWMAutoupdateController () <MWMCircularProgressProtocol, MWMFrameworkStorageObserver>
+{
+  std::unordered_set<TCountryId> m_updatingCountries;
+}
 
 @property(nonatomic) Framework::DoAfterUpdate todo;
 @property(nonatomic) TMwmSize sizeInMB;
 @property(nonatomic) NodeErrorCode errorCode;
+@property(nonatomic) BOOL progressFinished;
 
 @end
 
@@ -119,18 +147,18 @@ enum class State
 
 + (instancetype)instanceWithPurpose:(Framework::DoAfterUpdate)todo
 {
-  MWMAutoupdateController * controller = [[MWMAutoupdateController alloc] initWithNibName:[self className]
-                                                                                   bundle:[NSBundle mainBundle]];
+  MWMAutoupdateController * controller =
+      [[MWMAutoupdateController alloc] initWithNibName:[self className] bundle:NSBundle.mainBundle];
   controller.todo = todo;
   auto view = static_cast<MWMAutoupdateView *>(controller.view);
   view.delegate = controller;
   auto & f = GetFramework();
   auto const & s = f.GetStorage();
-  NodeAttrs attrs;
-  s.GetNodeAttrs(s.GetRootId(), attrs);
-  TMwmSize const countrySizeInBytes = attrs.m_localMwmSize;
-  view.updateSize = formattedSize(countrySizeInBytes);
-  controller.sizeInMB = countrySizeInBytes * MB;
+  storage::Storage::UpdateInfo updateInfo;
+  s.GetUpdateInfo(s.GetRootId(), updateInfo);
+  TMwmSize const updateSizeInBytes = updateInfo.m_totalUpdateSizeInBytes;
+  view.updateSize = formattedSize(updateSizeInBytes);
+  controller.sizeInMB = updateSizeInBytes / MB;
   [MWMFrameworkListener addObserver:controller];
   return controller;
 }
@@ -138,6 +166,7 @@ enum class State
 - (void)viewWillAppear:(BOOL)animated
 {
   [super viewWillAppear:animated];
+  self.progressFinished = NO;
   [Statistics logEvent:kStatDownloaderOnStartScreenShow
         withParameters:@{kStatMapDataSize : @(self.sizeInMB)}];
   auto view = static_cast<MWMAutoupdateView *>(self.view);
@@ -168,21 +197,41 @@ enum class State
   [Statistics logEvent:kStatDownloaderOnStartScreenManualDownload
         withParameters:@{kStatMapDataSize : @(self.sizeInMB)}];
 }
+- (IBAction)hideTap { [self dismiss]; }
 
-- (IBAction)cancelTap
+- (void)cancel
 {
-  [MWMStorage cancelDownloadNode:RootId()];
-  [self dismiss];
   auto view = static_cast<MWMAutoupdateView *>(self.view);
-  [Statistics logEvent:view.state == State::Downloading ?
-                                     kStatDownloaderOnStartScreenCancelDownload :
-                                     kStatDownloaderOnStartScreenSelectLater
-        withParameters:@{kStatMapDataSize : @(self.sizeInMB)}];
+  UIAlertController * alertController =
+      [UIAlertController alertControllerWithTitle:nil
+                                          message:nil
+                                   preferredStyle:UIAlertControllerStyleActionSheet];
+  alertController.popoverPresentationController.sourceView = view.secondaryButton;
+  alertController.popoverPresentationController.sourceRect = view.secondaryButton.bounds;
+  auto cancelDownloadAction =
+      [UIAlertAction actionWithTitle:L(@"cancel_download")
+                               style:UIAlertActionStyleDestructive
+                             handler:^(UIAlertAction * action) {
+                               [MWMStorage cancelDownloadNode:RootId()];
+                               [self dismiss];
+                               [Statistics logEvent:view.state == State::Downloading
+                                                        ? kStatDownloaderOnStartScreenCancelDownload
+                                                        : kStatDownloaderOnStartScreenSelectLater
+                                     withParameters:@{
+                                       kStatMapDataSize : @(self.sizeInMB)
+                                     }];
+                             }];
+  [alertController addAction:cancelDownloadAction];
+  auto cancelAction =
+      [UIAlertAction actionWithTitle:L(@"cancel") style:UIAlertActionStyleCancel handler:nil];
+  [alertController addAction:cancelAction];
+  [self presentViewController:alertController animated:YES completion:nil];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator
 {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
   [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
     [static_cast<MWMAutoupdateView *>(self.view) updateForSize:size];
   } completion:nil];
@@ -190,13 +239,7 @@ enum class State
 
 #pragma mark - MWMCircularProgressProtocol
 
-- (void)progressButtonPressed:(MWMCircularProgress *)progress
-{
-  [MWMStorage cancelDownloadNode:RootId()];
-  [static_cast<MWMAutoupdateView *>(self.view) stateWaiting];
-  [Statistics logEvent:kStatDownloaderOnStartScreenCancelDownload
-        withParameters:@{kStatMapDataSize : @(self.sizeInMB)}];
-}
+- (void)progressButtonPressed:(MWMCircularProgress *)progress { [self cancel]; }
 
 #pragma mark - MWMFrameworkStorageObserver
 
@@ -211,6 +254,19 @@ enum class State
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:process object:nil];
     [self performSelector:process withObject:nil afterDelay:0.2];
   }
+
+  if (!nodeStatuses.m_groupNode)
+  {
+    switch (nodeStatuses.m_status)
+    {
+    case NodeStatus::Error:
+    case NodeStatus::OnDisk: m_updatingCountries.erase(countryId); break;
+    default: m_updatingCountries.insert(countryId);
+    }
+  }
+  
+  if (self.progressFinished && m_updatingCountries.empty())
+    [self dismiss];
 }
 
 - (void)processError
@@ -240,15 +296,16 @@ enum class State
 - (void)processCountry:(TCountryId const &)countryId
               progress:(MapFilesDownloader::TProgress const &)progress
 {
+  if (m_updatingCountries.find(countryId) == m_updatingCountries.end())
+    return;
   auto const & s = GetFramework().GetStorage();
-  storage::TCountriesVec downloaded;
-  storage::TCountriesVec _;
   NodeAttrs nodeAttrs;
   s.GetNodeAttrs(RootId(), nodeAttrs);
-  auto const p = nodeAttrs.m_downloadingProgress;
-  static_cast<MWMAutoupdateView *>(self.view).progress = static_cast<CGFloat>(p.first) / p.second;
-  if (p.first == p.second)
-    [self dismiss];
+  auto view = static_cast<MWMAutoupdateView *>(self.view);
+  NSString * nodeName = @(s.GetNodeLocalName(countryId).c_str());
+  [view setProgress:nodeAttrs.m_downloadingProgress nodeName:nodeName];
+  if (nodeAttrs.m_downloadingProgress.first == nodeAttrs.m_downloadingProgress.second)
+    self.progressFinished = YES;
 }
 
 @end

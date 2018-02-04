@@ -99,7 +99,7 @@ bool Sample::DeserializeFromJSON(string const & jsonStr)
   }
   catch (my::Json::Exception const & e)
   {
-    LOG(LDEBUG, ("Can't parse sample:", e.Msg(), jsonStr));
+    LOG(LWARNING, ("Can't parse sample:", e.Msg(), jsonStr));
   }
   return false;
 }
@@ -190,14 +190,14 @@ void Sample::FillSearchParams(search::SearchParams & params) const
 {
   params.m_query = strings::ToUtf8(m_query);
   params.m_inputLocale = m_locale;
+  params.m_viewport = m_viewport;
   params.m_mode = Mode::Everywhere;
   if (m_posAvailable)
-  {
-    auto const latLon = MercatorBounds::ToLatLon(m_pos);
-    params.SetPosition(latLon.lat, latLon.lon);
-  }
+    params.m_position = m_pos;
 
+  params.m_needAddress = true;
   params.m_suggestsEnabled = false;
+  params.m_needHighlighting = false;
 }
 
 void FromJSONObject(json_t * root, string const & field, Sample::Result::Relevance & relevance)

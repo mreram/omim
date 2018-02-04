@@ -33,19 +33,22 @@ omim_link_libraries(
   search
   routing
   routing_common
+  ugc
   indexer
   platform_tests_support
-  osrm
   editor
   oauthcpp
   platform
   opening_hours
+  mwm_diff
+  bsdiff
   geometry
   coding
   base
   freetype
   expat
   icu
+  agg
   jansson
   tess2
   protobuf

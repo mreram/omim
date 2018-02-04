@@ -15,8 +15,15 @@ std::string const kSuffixVehicleClear = "_vehicle_clear";
 
 std::string const kStylesOverrideDir = "styles";
 
+#ifdef BUILD_DESIGNER
+std::string const kSuffixDesignTool = "_design";
+#endif // BUILD_DESIGNER
+
 std::string GetStyleRulesSuffix(MapStyle mapStyle)
 {
+#ifdef BUILD_DESIGNER
+  return kSuffixDesignTool;
+#else
   switch (mapStyle)
   {
   case MapStyleDark:
@@ -35,10 +42,14 @@ std::string GetStyleRulesSuffix(MapStyle mapStyle)
   }
   LOG(LWARNING, ("Unknown map style", mapStyle));
   return kSuffixClear;
+#endif // BUILD_DESIGNER
 }
 
 std::string GetStyleResourcesSuffix(MapStyle mapStyle)
 {
+#ifdef BUILD_DESIGNER
+  return kSuffixDesignTool;
+#else
   // We use the same resources for default and vehicle styles
   // to avoid textures duplication and package size increasing.
   switch (mapStyle)
@@ -57,6 +68,7 @@ std::string GetStyleResourcesSuffix(MapStyle mapStyle)
   }
   LOG(LWARNING, ("Unknown map style", mapStyle));
   return kSuffixClear;
+#endif // BUILD_DESIGNER
 }
 }  // namespace
 
@@ -69,12 +81,18 @@ void StyleReader::SetCurrentStyle(MapStyle mapStyle)
   m_mapStyle = mapStyle;
 }
 
-MapStyle StyleReader::GetCurrentStyle()
+MapStyle StyleReader::GetCurrentStyle() const
 {
   return m_mapStyle;
 }
 
-ReaderPtr<Reader> StyleReader::GetDrawingRulesReader()
+bool StyleReader::IsCarNavigationStyle() const
+{
+  return m_mapStyle == MapStyle::MapStyleVehicleClear ||
+         m_mapStyle == MapStyle::MapStyleVehicleDark;
+}
+
+ReaderPtr<Reader> StyleReader::GetDrawingRulesReader() const
 {
   std::string rulesFile =
       std::string("drules_proto") + GetStyleRulesSuffix(GetCurrentStyle()) + ".bin";
@@ -88,7 +106,7 @@ ReaderPtr<Reader> StyleReader::GetDrawingRulesReader()
 }
 
 ReaderPtr<Reader> StyleReader::GetResourceReader(std::string const & file,
-                                                 std::string const & density)
+                                                 std::string const & density) const
 {
   std::string const resourceDir =
       std::string("resources-") + density + GetStyleResourcesSuffix(GetCurrentStyle());
@@ -102,7 +120,7 @@ ReaderPtr<Reader> StyleReader::GetResourceReader(std::string const & file,
   return GetPlatform().GetReader(resFile);
 }
 
-ReaderPtr<Reader> StyleReader::GetDefaultResourceReader(std::string const & file)
+ReaderPtr<Reader> StyleReader::GetDefaultResourceReader(std::string const & file) const
 {
   return GetPlatform().GetReader(my::JoinFoldersToPath("resources-default", file));
 }

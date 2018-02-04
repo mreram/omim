@@ -85,6 +85,7 @@ char const * kRouteType = "type";
 char const * kRouteTypeVehicle = "vehicle";
 char const * kRouteTypePedestrian = "pedestrian";
 char const * kRouteTypeBicycle = "bicycle";
+char const * kRouteTypeTransit = "transit";
 }  // namespace route
 
 namespace search
@@ -192,13 +193,13 @@ ParsedMapApi::ParsingResult ParsedMapApi::Parse(Uri const & uri)
         return ParsingResult::Incorrect;
 
       ASSERT(m_bmManager != nullptr, ());
-      UserMarkControllerGuard guard(*m_bmManager, UserMarkType::API_MARK);
+      UserMarkNotificationGuard guard(*m_bmManager, UserMark::Type::API);
       for (auto const & p : points)
       {
         m2::PointD glPoint(MercatorBounds::FromLatLon(p.m_lat, p.m_lon));
         ApiMarkPoint * mark = static_cast<ApiMarkPoint *>(guard.m_controller.CreateUserMark(glPoint));
         mark->SetName(p.m_name);
-        mark->SetID(p.m_id);
+        mark->SetApiID(p.m_id);
         mark->SetStyle(style::GetSupportedStyle(p.m_style, p.m_name, ""));
       }
 
@@ -285,7 +286,8 @@ bool ParsedMapApi::RouteKeyValue(string const & key, string const & value, vecto
   else if (key == kRouteType)
   {
     string const lowerValue = strings::MakeLowerCase(value);
-    if (lowerValue == kRouteTypePedestrian || lowerValue == kRouteTypeVehicle || lowerValue == kRouteTypeBicycle)
+    if (lowerValue == kRouteTypePedestrian || lowerValue == kRouteTypeVehicle ||
+        lowerValue == kRouteTypeBicycle || lowerValue == kRouteTypeTransit)
     {
       m_routingType = lowerValue;
     }
@@ -444,7 +446,7 @@ void ParsedMapApi::Reset()
 bool ParsedMapApi::GetViewportRect(m2::RectD & rect) const
 {
   ASSERT(m_bmManager != nullptr, ());
-  UserMarkControllerGuard guard(*m_bmManager, UserMarkType::API_MARK);
+  UserMarkNotificationGuard guard(*m_bmManager, UserMark::Type::API);
 
   size_t markCount = guard.m_controller.GetUserMarkCount();
   if (markCount == 1 && m_zoomLevel >= 1)
@@ -472,7 +474,7 @@ bool ParsedMapApi::GetViewportRect(m2::RectD & rect) const
 ApiMarkPoint const * ParsedMapApi::GetSinglePoint() const
 {
   ASSERT(m_bmManager != nullptr, ());
-  UserMarkControllerGuard guard(*m_bmManager, UserMarkType::API_MARK);
+  UserMarkNotificationGuard guard(*m_bmManager, UserMark::Type::API);
 
   if (guard.m_controller.GetUserMarkCount() != 1)
     return nullptr;

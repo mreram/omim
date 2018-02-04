@@ -28,7 +28,7 @@ class BottomPlacePageAnimationController extends BasePlacePageAnimationControlle
 {
   @SuppressWarnings("unused")
   private static final String TAG = BottomPlacePageAnimationController.class.getSimpleName();
-  private static final float DETAIL_RATIO = 0.7f;
+  private static final float DETAIL_RATIO = 0.5f;
   private static final float SCROLL_DELTA = 50.0f;
   private final ViewGroup mLayoutToolbar;
 
@@ -111,7 +111,8 @@ class BottomPlacePageAnimationController extends BasePlacePageAnimationControlle
       case MotionEvent.ACTION_UP:
         final boolean isInside = UiUtils.isViewTouched(event, mDetailsScroll);
         final boolean isBannerTouch = mPlacePage.isBannerTouched(event);
-        if (isInside && !isBannerTouch && mIsGestureStartedInsideView)
+        boolean isLeaveReviewButtonTouched = mPlacePage.isLeaveReviewButtonTouched(event);
+        if (isInside && !isBannerTouch && !isLeaveReviewButtonTouched && mIsGestureStartedInsideView)
           mGestureDetector.onTouchEvent(event);
         mIsDragging = false;
         break;
@@ -148,15 +149,17 @@ class BottomPlacePageAnimationController extends BasePlacePageAnimationControlle
   public void onScroll(int left, int top)
   {
     super.onScroll(left, top);
+    resetDetailsScrollIfNeeded();
+    refreshToolbarVisibility();
+    notifyProgress();
+  }
 
+  private void resetDetailsScrollIfNeeded()
+  {
     if (mCurrentScrollY > 0 && mDetailsScroll.getTranslationY() > 0)
     {
-      if (mState != State.PREVIEW)
-        mPlacePage.setState(State.HIDDEN);
-      else
-        mDetailsScroll.scrollTo(0, 0);
+      mDetailsScroll.scrollTo(0, 0);
     }
-    refreshToolbarVisibility();
   }
 
   /**
@@ -272,7 +275,12 @@ class BottomPlacePageAnimationController extends BasePlacePageAnimationControlle
       return;
     }
 
-    if (distance >= 0.0f) // drag up
+    boolean isDragUp = distance >= 0.0f;
+
+    if (isDragUp && mPlacePage.getState() == State.FULLSCREEN)
+      return;
+
+    if (isDragUp) // drag up
     {
       if (mPlacePage.getState() == State.PREVIEW)
       {
@@ -464,17 +472,14 @@ class BottomPlacePageAnimationController extends BasePlacePageAnimationControlle
 
   private void showDetails()
   {
+    final float translation;
     if (isDetailContentScrollable())
-    {
-      mCurrentAnimator = ValueAnimator.ofFloat(mDetailsScroll.getTranslationY(),
-                                               mDetailsScroll.getHeight() - mDetailMaxHeight + mButtons
-                                                   .getHeight());
-    }
+      translation = mDetailMaxHeight - mButtons.getHeight();
     else
-    {
-      mCurrentAnimator = ValueAnimator.ofFloat(mDetailsScroll.getTranslationY(),
-                                               mDetailsScroll.getHeight() - mContentHeight);
-    }
+      translation = mContentHeight > mDetailMaxHeight ? mDetailMaxHeight - mButtons.getHeight()
+                                                      : mContentHeight;
+    mCurrentAnimator = ValueAnimator.ofFloat(mDetailsScroll.getTranslationY(),
+                                             mDetailsScroll.getHeight() - translation);
     mCurrentAnimator.addUpdateListener(new UpdateListener());
     mCurrentAnimator.addListener(new AnimationListener());
 
@@ -573,11 +578,6 @@ class BottomPlacePageAnimationController extends BasePlacePageAnimationControlle
     mBannerOpenListener = bannerOpenListener;
   }
 
-  private boolean isOverDetailsState()
-  {
-    return mDetailsScroll.getTranslationY() < mScreenHeight - mDetailMaxHeight;
-  }
-
   private void onContentSizeChanged()
   {
     if (mIsDragging || mCurrentScrollY > 0)
@@ -585,12 +585,7 @@ class BottomPlacePageAnimationController extends BasePlacePageAnimationControlle
 
     MapObject object = mPlacePage.getMapObject();
     if (object != null)
-    {
-      State newState = getState();
-      if (isOverDetailsState())
-        newState = State.FULLSCREEN;
-      onStateChanged(getState(), newState, object.getMapObjectType());
-    }
+      onStateChanged(getState(), getState(), object.getMapObjectType());
   }
 
   @Override

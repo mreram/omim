@@ -2,7 +2,6 @@
 
 #include "drape_frontend/backend_renderer.hpp"
 #include "drape_frontend/color_constants.hpp"
-#include "drape_frontend/custom_symbol.hpp"
 #include "drape_frontend/drape_hints.hpp"
 #include "drape_frontend/frontend_renderer.hpp"
 #include "drape_frontend/route_shape.hpp"
@@ -12,6 +11,7 @@
 #include "drape_frontend/selection_shape.hpp"
 #include "drape_frontend/threads_commutator.hpp"
 
+#include "drape/drape_global.hpp"
 #include "drape/pointers.hpp"
 #include "drape/texture_manager.hpp"
 #include "drape/viewport.hpp"
@@ -27,6 +27,7 @@
 #include "base/strings_bundle.hpp"
 
 #include <functional>
+#include <mutex>
 #include <vector>
 
 namespace dp
@@ -122,16 +123,18 @@ public:
   void Scale(double factor, m2::PointD const & pxPoint, bool isAnim);
 
   // If zoom == -1 then current zoom will not be changed.
-  void SetModelViewCenter(m2::PointD const & centerPt, int zoom, bool isAnim);
+  void SetModelViewCenter(m2::PointD const & centerPt, int zoom, bool isAnim,
+                          bool trackVisibleViewport);
   void SetModelViewRect(m2::RectD const & rect, bool applyRotation, int zoom, bool isAnim);
   void SetModelViewAnyRect(m2::AnyRectD const & rect, bool isAnim);
 
   using TModelViewListenerFn = FrontendRenderer::TModelViewChanged;
   void SetModelViewListener(TModelViewListenerFn && fn);
 
-  void ClearUserMarksLayer(size_t layerId);
-  void ChangeVisibilityUserMarksLayer(size_t layerId, bool isVisible);
-  void UpdateUserMarksLayer(size_t layerId, UserMarksProvider * provider);
+  void ClearUserMarksGroup(size_t layerId);
+  void ChangeVisibilityUserMarksGroup(MarkGroupID groupId, bool isVisible);
+  void UpdateUserMarksGroup(MarkGroupID groupId, UserMarksProvider * provider);
+  void InvalidateUserMarks();
 
   void SetRenderingEnabled(ref_ptr<dp::OGLContextFactory> contextFactory = nullptr);
   void SetRenderingDisabled(bool const destroyContext);
@@ -139,7 +142,8 @@ public:
   void UpdateMapStyle();
 
   void SetCompassInfo(location::CompassInfo const & info);
-  void SetGpsInfo(location::GpsInfo const & info, bool isNavigable, location::RouteMatchingInfo const & routeInfo);
+  void SetGpsInfo(location::GpsInfo const & info, bool isNavigable,
+                  location::RouteMatchingInfo const & routeInfo);
   void SwitchMyPositionNextMode();
   void LoseLocation();
   void StopLocationFollow();
@@ -149,20 +153,18 @@ public:
   using TUserPositionChangedFn = FrontendRenderer::TUserPositionChangedFn;
   void SetUserPositionListener(TUserPositionChangedFn && fn);
 
-  FeatureID GetVisiblePOI(m2::PointD const & glbPoint);
   void SelectObject(SelectionShape::ESelectedObject obj, m2::PointD const & pt,
                     FeatureID const & featureID, bool isAnim);
   void DeselectObject();
-  bool GetMyPosition(m2::PointD & myPosition);
-  SelectionShape::ESelectedObject GetSelectedObject();
-
-  void AddRoute(m2::PolylineD const & routePolyline, std::vector<double> const & turns,
-                df::ColorConstant color, std::vector<traffic::SpeedGroup> const & traffic,
-                df::RoutePattern pattern = df::RoutePattern());
-  void RemoveRoute(bool deactivateFollowing);
+  
+  dp::DrapeID AddSubroute(SubrouteConstPtr subroute);
+  void RemoveSubroute(dp::DrapeID subrouteId, bool deactivateFollowing);
   void FollowRoute(int preferredZoomLevel, int preferredZoomLevel3d, bool enableAutoZoom);
   void DeactivateRouteFollowing();
-  void SetRoutePoint(m2::PointD const & position, bool isStart, bool isValid);
+  void SetSubrouteVisibility(dp::DrapeID subrouteId, bool isVisible);
+  dp::DrapeID AddRoutePreviewSegment(m2::PointD const & startPt, m2::PointD const & finishPt);
+  void RemoveRoutePreviewSegment(dp::DrapeID segmentId);
+  void RemoveAllRoutePreviewSegments();
 
   void SetWidgetLayout(gui::TWidgetsLayoutInfo && info);
 
@@ -201,23 +203,30 @@ public:
                    ScenarioManager::ScenarioCallback const & onStartFn,
                    ScenarioManager::ScenarioCallback const & onFinishFn);
 
-  void AddCustomSymbols(CustomSymbols && symbols);
-  void RemoveCustomSymbols(MwmSet::MwmId const & mwmId);
-  void RemoveAllCustomSymbols();
+  // Custom features are features which we do not render usual way.
+  // All these features will be skipped in process of geometry generation.
+  void SetCustomFeatures(std::set<FeatureID> && ids);
+  void RemoveCustomFeatures(MwmSet::MwmId const & mwmId);
+  void RemoveAllCustomFeatures();
 
   void SetPosteffectEnabled(PostprocessRenderer::Effect effect, bool enabled);
 
+  void RunFirstLaunchAnimation();
+
 private:
   void AddUserEvent(drape_ptr<UserEvent> && e);
+  void PostUserEvent(drape_ptr<UserEvent> && e);
   void ModelViewChanged(ScreenBase const & screen);
 
   void MyPositionModeChanged(location::EMyPositionMode mode, bool routingActive);
   void TapEvent(TapInfo const & tapInfo);
-  void UserPositionChanged(m2::PointD const & position);
+  void UserPositionChanged(m2::PointD const & position, bool hasPosition);
 
   void ResizeImpl(int w, int h);
   void RecacheGui(bool needResetOldGui);
   void RecacheMapShapes();
+
+  dp::DrapeID GenerateDrapeID();
 
   drape_ptr<FrontendRenderer> m_frontend;
   drape_ptr<BackendRenderer> m_backend;
@@ -238,7 +247,9 @@ private:
   bool m_choosePositionMode = false;
   bool m_kineticScrollEnabled = true;
 
+  std::mutex m_drapeIdGeneratorMutex;
+  dp::DrapeID m_drapeIdGenerator = 0;
+
   friend class DrapeApi;
 };
-
-} // namespace df
+}  // namespace df

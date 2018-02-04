@@ -1,18 +1,21 @@
 #import "MWMMapDownloadDialog.h"
 #import "CLLocation+Mercator.h"
 #import "MWMAlertViewController.h"
+#import "MWMBottomMenuViewController.h"
 #import "MWMCircularProgress.h"
 #import "MWMCommon.h"
 #import "MWMFrameworkListener.h"
 #import "MWMFrameworkObservers.h"
 #import "MWMLocationManager.h"
+#import "MWMRouter.h"
 #import "MWMSettings.h"
 #import "MWMStorage.h"
 #import "MapViewController.h"
-#import "MapsAppDelegate.h"
 #import "Statistics.h"
 
 #include "Framework.h"
+
+#include "storage/country_info_getter.hpp"
 
 #include "platform/local_country_file_utils.hpp"
 
@@ -20,7 +23,7 @@ namespace
 {
 CGSize constexpr kInitialDialogSize = {200, 200};
 
-BOOL canAutoDownload(TCountryId const & countryId)
+BOOL canAutoDownload(storage::TCountryId const & countryId)
 {
   if (![MWMSettings autoDownloadEnabled])
     return NO;
@@ -65,7 +68,7 @@ using namespace storage;
 + (instancetype)dialogForController:(MapViewController *)controller
 {
   MWMMapDownloadDialog * dialog =
-      [[NSBundle mainBundle] loadNibNamed:[self className] owner:nil options:nil].firstObject;
+      [NSBundle.mainBundle loadNibNamed:[self className] owner:nil options:nil].firstObject;
   dialog.autoresizingMask = UIViewAutoresizingFlexibleHeight;
   dialog.controller = controller;
   dialog.size = kInitialDialogSize;
@@ -98,7 +101,7 @@ using namespace storage;
   NodeAttrs nodeAttrs;
   s.GetNodeAttrs(m_countryId, nodeAttrs);
 
-  if (!nodeAttrs.m_present && !f.IsRoutingActive())
+  if (!nodeAttrs.m_present && ![MWMRouter isRoutingActive])
   {
     BOOL const isMultiParent = nodeAttrs.m_parentInfo.size() > 1;
     BOOL const noParrent = (nodeAttrs.m_parentInfo[0].m_id == s.GetRootId());
@@ -175,7 +178,12 @@ using namespace storage;
 {
   if (self.superview)
     return;
-  [self.controller.view insertSubview:self atIndex:0];
+  auto superview = self.controller.view;
+  auto bottomMenuView = [MWMBottomMenuViewController controller].view;
+  if (bottomMenuView)
+    [superview insertSubview:self belowSubview:bottomMenuView];
+  else
+    [superview addSubview:self];
   [MWMFrameworkListener addObserver:self];
 }
 

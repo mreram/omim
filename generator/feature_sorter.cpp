@@ -13,6 +13,7 @@
 #include "indexer/feature_impl.hpp"
 #include "indexer/geometry_serialization.hpp"
 #include "indexer/scales.hpp"
+#include "indexer/scales_patch.hpp"
 
 #include "platform/mwm_version.hpp"
 
@@ -191,7 +192,8 @@ namespace feature
 
       m_writer.Finish();
 
-      if (m_header.GetType() == DataHeader::country)
+      if (m_header.GetType() == DataHeader::country ||
+          m_header.GetType() == DataHeader::world)
       {
         FileWriter osm2ftWriter(m_writer.GetFileName() + OSM2FEATURE_FILE_EXTENSION);
         m_osm2ft.Flush(osm2ftWriter);
@@ -457,7 +459,7 @@ namespace feature
       for (int i = scalesStart; i >= 0; --i)
       {
         int const level = m_header.GetScale(i);
-        if (fb.IsDrawableInRange(i > 0 ? m_header.GetScale(i-1) + 1 : 0, level))
+        if (fb.IsDrawableInRange(i > 0 ? m_header.GetScale(i-1) + 1 : 0, PatchScaleBound(level)))
         {
           bool const isCoast = fb.IsCoastCell();
           m2::RectD const rect = fb.GetLimitRect();

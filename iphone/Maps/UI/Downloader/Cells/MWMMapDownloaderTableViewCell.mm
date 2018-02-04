@@ -62,8 +62,8 @@
                                     selectedAttrs:selectedTitleAttrs
                                   unselectedAttrs:unselectedTitleAttrs];
 
-  TMwmSize size = nodeAttrs.m_mwmSize;
-  bool const isModeDownloaded = self.mode == mwm::DownloaderMode::Downloaded;
+  TMwmSize size;
+  bool const isModeDownloaded = self.mode == MWMMapDownloaderModeDownloaded;
 
   switch (nodeAttrs.m_status)
   {
@@ -93,7 +93,7 @@
 {
   MWMCircularProgress * progress = self.progress;
   MWMButtonColoring const coloring =
-      self.mode == mwm::DownloaderMode::Downloaded ? MWMButtonColoringBlack : MWMButtonColoringBlue;
+      self.mode == MWMMapDownloaderModeDownloaded ? MWMButtonColoringBlack : MWMButtonColoringBlue;
   switch (nodeAttrs.m_status)
   {
   case NodeStatus::NotDownloaded:
@@ -111,7 +111,7 @@
   case NodeStatus::Downloading:
   {
     auto const & prg = nodeAttrs.m_downloadingProgress;
-    progress.progress = static_cast<CGFloat>(prg.first) / prg.second;
+    progress.progress = kMaxProgress * static_cast<CGFloat>(prg.first) / prg.second;
     break;
   }
   case NodeStatus::InQueue: progress.state = MWMCircularProgressStateSpinner; break;
@@ -146,7 +146,7 @@
 {
   if (countryId != m_countryId)
     return;
-  self.progress.progress = static_cast<CGFloat>(progress.first) / progress.second;
+  self.progress.progress = kMaxProgress * static_cast<CGFloat>(progress.first) / progress.second;
 }
 
 #pragma mark - MWMCircularProgressProtocol

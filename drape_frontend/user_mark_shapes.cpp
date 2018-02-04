@@ -1,18 +1,35 @@
 #include "drape_frontend/user_mark_shapes.hpp"
 
+#include "drape_frontend/colored_symbol_shape.hpp"
 #include "drape_frontend/line_shape.hpp"
 #include "drape_frontend/map_shape.hpp"
+#include "drape_frontend/poi_symbol_shape.hpp"
 #include "drape_frontend/shader_def.hpp"
 #include "drape_frontend/shape_view_params.hpp"
+#include "drape_frontend/text_shape.hpp"
 #include "drape_frontend/tile_utils.hpp"
+#include "drape_frontend/visual_params.hpp"
 
 #include "drape/utils/vertex_decl.hpp"
 #include "drape/attribute_provider.hpp"
+#include "drape/batcher.hpp"
 
-#include "geometry/spline.hpp"
+#include "indexer/feature_decl.hpp"
+#include "indexer/scales.hpp"
+
+#include "geometry/clipping.hpp"
+#include "geometry/mercator.hpp"
+
+#include <vector>
 
 namespace df
 {
+std::vector<double> const kLineWidthZoomFactor =
+{
+// 1   2    3    4    5    6    7    8    9    10   11   12   13   14   15   16   17   18   19
+  0.3, 0.3, 0.3, 0.4, 0.5, 0.6, 0.7, 0.7, 0.7, 0.7, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0
+};
+int const kLineSimplifyLevelEnd = 15;
 
 namespace
 {
@@ -55,7 +72,7 @@ struct UserPointVertex : gpu::BaseVertex
     : m_position(pos)
     , m_normal(normal)
     , m_texCoord(texCoord)
-    , m_isAnim(isAnim ? 1.0 : -1.0)
+    , m_isAnim(isAnim ? 1.0f : -1.0f)
   {}
 
   static dp::BindingInfo GetBinding()
@@ -76,57 +93,128 @@ struct UserPointVertex : gpu::BaseVertex
   float m_isAnim;
 };
 
-using UPV = UserPointVertex;
+} // namespace
 
-void CacheUserPoints(UserMarksProvider const * provider, ref_ptr<dp::TextureManager> textures,
-                     TUserMarkShapes & outShapes)
+void CacheUserMarks(TileKey const & tileKey, ref_ptr<dp::TextureManager> textures,
+                    IDCollection const & marksId, UserMarksRenderCollection & renderParams,
+                    dp::Batcher & batcher)
 {
-  size_t markCount = provider->GetUserPointCount();
-  if (markCount == 0)
-    return;
+  float const vs = static_cast<float>(df::VisualParams::Instance().GetVisualScale());
+  using UPV = UserPointVertex;
+  size_t const vertexCount = marksId.size() * dp::Batcher::VertexPerQuad;
+  buffer_vector<UPV, 128> buffer;
+  bool isAnimated = false;
 
-  int const kZoomLevel = 10;
-  map<TileKey, vector<UserPointMark const *>> marks;
-  for (size_t i = 0; i < markCount; ++i)
+  dp::TextureManager::SymbolRegion region;
+  RenderState::DepthLayer depthLayer = RenderState::UserMarkLayer;
+  for (auto const id : marksId)
   {
-    UserPointMark const * userMark = provider->GetUserPointMark(i);
-    TileKey const tileKey = GetTileKeyByPoint(userMark->GetPivot(), kZoomLevel);
-    marks[tileKey].push_back(userMark);
-  }
+    auto const it = renderParams.find(id);
+    if (it == renderParams.end())
+      continue;
 
-  for (auto it = marks.begin(); it != marks.end(); ++it)
-  {
-    TileKey const & key = it->first;
-    m2::PointD const tileCenter = key.GetGlobalRect().Center();
+    UserMarkRenderParams & renderInfo = *it->second.get();
+    if (!renderInfo.m_isVisible)
+      continue;
 
-    sort(it->second.begin(), it->second.end(), [](UserPointMark const * v1, UserPointMark const * v2)
+    m2::PointD const tileCenter = tileKey.GetGlobalRect().Center();
+    depthLayer = renderInfo.m_depthLayer;
+
+    m2::PointF symbolSize(0.0f, 0.0f);
+    m2::PointF symbolOffset(0.0f, 0.0f);
+    std::string symbolName;
+    if (renderInfo.m_symbolNames != nullptr)
     {
-      return v1->GetPivot().y < v2->GetPivot().y;
-    });
+      for (auto itName = renderInfo.m_symbolNames->rbegin(); itName != renderInfo.m_symbolNames->rend(); ++itName)
+      {
+        if (itName->first <= tileKey.m_zoomLevel)
+        {
+          symbolName = itName->second;
+          break;
+        }
+      }
+    }
 
-    dp::TextureManager::SymbolRegion region;
-
-    uint32_t const vertexCount = static_cast<uint32_t>(it->second.size()) * dp::Batcher::VertexPerQuad;
-    uint32_t const indicesCount = static_cast<uint32_t>(it->second.size()) * dp::Batcher::IndexPerQuad;
-    buffer_vector<UPV, 128> buffer;
-    buffer.reserve(vertexCount);
-
-    for (size_t i = 0; i < it->second.size(); ++i)
+    if (renderInfo.m_hasSymbolPriority)
     {
-      UserPointMark const * pointMark = it->second[i];
-      textures->GetSymbolRegion(pointMark->GetSymbolName(), region);
+      if (renderInfo.m_coloredSymbols != nullptr)
+      {
+        for (auto itSym = renderInfo.m_coloredSymbols->rbegin(); itSym != renderInfo.m_coloredSymbols->rend(); ++itSym)
+        {
+          if (itSym->first <= tileKey.m_zoomLevel)
+          {
+            ColoredSymbolViewParams params = itSym->second;
+            if (params.m_shape == ColoredSymbolViewParams::Shape::Circle)
+              symbolSize = m2::PointF(params.m_radiusInPixels * 2.0f, params.m_radiusInPixels * 2.0f);
+            else
+              symbolSize = params.m_sizeInPixels;
+
+            params.m_featureID = renderInfo.m_featureId;
+            params.m_tileCenter = tileCenter;
+            params.m_depth = renderInfo.m_depth;
+            params.m_depthLayer = renderInfo.m_depthLayer;
+            params.m_minVisibleScale = renderInfo.m_minZoom;
+            params.m_specialDisplacement = SpecialDisplacement::UserMark;
+            params.m_specialPriority = renderInfo.m_priority;
+            if (renderInfo.m_symbolSizes != nullptr)
+            {
+              ColoredSymbolShape(renderInfo.m_pivot, params, tileKey, kStartUserMarkOverlayIndex + renderInfo.m_index,
+                                 *renderInfo.m_symbolSizes.get()).Draw(&batcher, textures);
+            }
+            else
+            {
+              ColoredSymbolShape(renderInfo.m_pivot, params, tileKey,
+                                 kStartUserMarkOverlayIndex + renderInfo.m_index).Draw(&batcher, textures);
+            }
+            break;
+          }
+        }
+      }
+      if (renderInfo.m_symbolNames != nullptr)
+      {
+        PoiSymbolViewParams params(renderInfo.m_featureId);
+        params.m_tileCenter = tileCenter;
+        params.m_depth = renderInfo.m_depth;
+        params.m_depthLayer = renderInfo.m_depthLayer;
+        params.m_minVisibleScale = renderInfo.m_minZoom;
+        params.m_specialDisplacement = SpecialDisplacement::UserMark;
+        params.m_specialPriority = renderInfo.m_priority;
+        params.m_symbolName = symbolName;
+        params.m_anchor = renderInfo.m_anchor;
+        params.m_startOverlayRank = renderInfo.m_coloredSymbols != nullptr ? dp::OverlayRank1 : dp::OverlayRank0;
+        if (renderInfo.m_symbolOffsets != nullptr)
+        {
+          ASSERT_GREATER(tileKey.m_zoomLevel, 0, ());
+          ASSERT_LESS_OR_EQUAL(tileKey.m_zoomLevel, scales::UPPER_STYLE_SCALE, ());
+          size_t offsetIndex = 0;
+          if (tileKey.m_zoomLevel > 0)
+            offsetIndex = static_cast<size_t>(min(tileKey.m_zoomLevel - 1, scales::UPPER_STYLE_SCALE));
+          symbolOffset = renderInfo.m_symbolOffsets->at(offsetIndex);
+          params.m_offset = symbolOffset;
+        }
+        PoiSymbolShape(renderInfo.m_pivot, params, tileKey,
+                       kStartUserMarkOverlayIndex + renderInfo.m_index).Draw(&batcher, textures);
+      }
+    }
+    else if (renderInfo.m_symbolNames != nullptr)
+    {
+      buffer.reserve(vertexCount);
+
+      textures->GetSymbolRegion(symbolName, region);
       m2::RectF const & texRect = region.GetTexRect();
       m2::PointF const pxSize = region.GetPixelSize();
-      dp::Anchor const anchor = pointMark->GetAnchor();
-      m2::PointD const pt = MapShape::ConvertToLocal(pointMark->GetPivot(), tileCenter, kShapeCoordScalar);
-      glsl::vec3 const pos = glsl::vec3(glsl::ToVec2(pt), pointMark->GetDepth());
-      bool const runAnim = pointMark->RunCreationAnim();
+      dp::Anchor const anchor = renderInfo.m_anchor;
+      m2::PointD const pt = MapShape::ConvertToLocal(renderInfo.m_pivot, tileCenter,
+                                                     kShapeCoordScalar);
+      glsl::vec3 const pos = glsl::vec3(glsl::ToVec2(pt), renderInfo.m_depth);
+      bool const runAnim = renderInfo.m_hasCreationAnimation && renderInfo.m_justCreated;
+      isAnimated |= runAnim;
 
       glsl::vec2 left, right, up, down;
       AlignHorizontal(pxSize.x * 0.5f, anchor, left, right);
       AlignVertical(pxSize.y * 0.5f, anchor, up, down);
 
-      m2::PointD const pixelOffset = pointMark->GetPixelOffset();
+      m2::PointD const pixelOffset = renderInfo.m_pixelOffset;
       glsl::vec2 const offset(pixelOffset.x, pixelOffset.y);
 
       buffer.emplace_back(pos, left + down + offset, glsl::ToVec2(texRect.LeftTop()), runAnim);
@@ -135,87 +223,200 @@ void CacheUserPoints(UserMarksProvider const * provider, ref_ptr<dp::TextureMana
       buffer.emplace_back(pos, right + up + offset, glsl::ToVec2(texRect.RightBottom()), runAnim);
     }
 
-    dp::GLState state(gpu::BOOKMARK_PROGRAM, dp::GLState::UserMarkLayer);
-    state.SetProgram3dIndex(gpu::BOOKMARK_BILLBOARD_PROGRAM);
+    if (!symbolName.empty())
+    {
+      textures->GetSymbolRegion(symbolName, region);
+      symbolSize.x = std::max(region.GetPixelSize().x, symbolSize.x);
+      symbolSize.y = std::max(region.GetPixelSize().y, symbolSize.y);
+    }
+
+    if (renderInfo.m_titleDecl != nullptr && renderInfo.m_minTitleZoom <= tileKey.m_zoomLevel)
+    {
+      for (auto const & titleDecl : *renderInfo.m_titleDecl)
+      {
+        if (titleDecl.m_primaryText.empty())
+          continue;
+
+        TextViewParams params;
+        params.m_featureID = renderInfo.m_featureId;
+        params.m_tileCenter = tileCenter;
+        params.m_titleDecl = titleDecl;
+
+        // Here we use visual scale to adapt texts sizes and offsets
+        // to different screen resolutions and DPI.
+        params.m_titleDecl.m_primaryTextFont.m_size *= vs;
+        params.m_titleDecl.m_secondaryTextFont.m_size *= vs;
+        params.m_titleDecl.m_primaryOffset *= vs;
+        params.m_titleDecl.m_secondaryOffset *= vs;
+        bool const isSdf = df::VisualParams::Instance().IsSdfPrefered();
+        params.m_titleDecl.m_primaryTextFont.m_isSdf =
+            params.m_titleDecl.m_primaryTextFont.m_outlineColor != dp::Color::Transparent() ? true : isSdf;
+        params.m_titleDecl.m_secondaryTextFont.m_isSdf =
+            params.m_titleDecl.m_secondaryTextFont.m_outlineColor != dp::Color::Transparent() ? true : isSdf;
+
+        params.m_depth = renderInfo.m_depth;
+        params.m_depthLayer = renderInfo.m_depthLayer;
+        params.m_minVisibleScale = renderInfo.m_minZoom;
+
+        uint32_t const overlayIndex = kStartUserMarkOverlayIndex + renderInfo.m_index;
+        if (renderInfo.m_hasTitlePriority)
+        {
+          params.m_specialDisplacement = SpecialDisplacement::UserMark;
+          params.m_specialPriority = renderInfo.m_priority;
+          params.m_startOverlayRank = dp::OverlayRank0;
+          if (renderInfo.m_hasSymbolPriority)
+          {
+            if (renderInfo.m_symbolNames != nullptr)
+              params.m_startOverlayRank++;
+            if (renderInfo.m_coloredSymbols != nullptr)
+              params.m_startOverlayRank++;
+            ASSERT_LESS(params.m_startOverlayRank, dp::OverlayRanksCount, ());
+          }
+        }
+
+        if (renderInfo.m_symbolSizes != nullptr)
+        {
+          TextShape(renderInfo.m_pivot, params, tileKey, *renderInfo.m_symbolSizes.get(),
+                    m2::PointF(0.0f, 0.0f) /* symbolOffset */, renderInfo.m_anchor,
+                    overlayIndex).Draw(&batcher, textures);
+        }
+        else
+        {
+          TextShape(renderInfo.m_pivot, params, tileKey,
+                    symbolSize, symbolOffset, renderInfo.m_anchor, overlayIndex).Draw(&batcher, textures);
+        }
+      }
+    }
+
+    renderInfo.m_justCreated = false;
+  }
+
+  if (!buffer.empty())
+  {
+    auto state = CreateGLState(isAnimated ? gpu::BOOKMARK_ANIM_PROGRAM
+                                          : gpu::BOOKMARK_PROGRAM, depthLayer);
+    state.SetProgram3dIndex(isAnimated ? gpu::BOOKMARK_ANIM_BILLBOARD_PROGRAM
+                                       : gpu::BOOKMARK_BILLBOARD_PROGRAM);
     state.SetColorTexture(region.GetTexture());
     state.SetTextureFilter(gl_const::GLNearest);
 
-    uint32_t const kMaxSize = 65000;
-    dp::Batcher batcher(min(indicesCount, kMaxSize), min(vertexCount, kMaxSize));
-    dp::SessionGuard guard(batcher, [&key, &outShapes](dp::GLState const & state,
-                                                       drape_ptr<dp::RenderBucket> && b)
-    {
-      outShapes.emplace_back(UserMarkShape(state, move(b), key));
-    });
     dp::AttributeProvider attribProvider(1, static_cast<uint32_t>(buffer.size()));
     attribProvider.InitStream(0, UPV::GetBinding(), make_ref(buffer.data()));
+
     batcher.InsertListOfStrip(state, make_ref(&attribProvider), dp::Batcher::VertexPerQuad);
   }
 }
 
-void CacheUserLines(UserMarksProvider const * provider, ref_ptr<dp::TextureManager> textures,
-                    TUserMarkShapes & outShapes)
+void ProcessSplineSegmentRects(m2::SharedSpline const & spline, double maxSegmentLength,
+                               const std::function<bool(const m2::RectD & segmentRect)> & func)
 {
-  int const kZoomLevel = 10;
-  map<TileKey, vector<pair<UserLineMark const *, m2::SharedSpline>>> userLines;
-  for (size_t i = 0; i < provider->GetUserLineCount(); ++i)
+  double const splineFullLength = spline->GetLength();
+  double length = 0;
+  while (length < splineFullLength)
   {
-    UserLineMark const * line = provider->GetUserLineMark(i);
-    size_t const pointCount = line->GetPointCount();
+    m2::RectD splineRect;
 
-    vector<m2::PointD> points;
-    m2::RectD rect;
-    points.reserve(pointCount);
-    for (size_t i = 0; i < pointCount; ++i)
+    auto const itBegin = spline->GetPoint(length);
+    auto itEnd = spline->GetPoint(length + maxSegmentLength);
+    if (itEnd.BeginAgain())
     {
-      points.push_back(line->GetPoint(i));
-      rect.Add(points.back());
+      double const lastSegmentLength = spline->GetLengths().back();
+      itEnd = spline->GetPoint(splineFullLength - lastSegmentLength / 2.0);
+      splineRect.Add(spline->GetPath().back());
     }
 
-    TileKey const tileKey = GetTileKeyByPoint(rect.Center(), kZoomLevel);
-    userLines[tileKey].push_back(make_pair(line, m2::SharedSpline(points)));
+    spline->ForEachNode(itBegin, itEnd, [&splineRect](m2::PointD const & pt)
+    {
+      splineRect.Add(pt);
+    });
+
+    length += maxSegmentLength;
+
+    if (!func(splineRect))
+      return;
+  }
+}
+
+void CacheUserLines(TileKey const & tileKey, ref_ptr<dp::TextureManager> textures,
+                    IDCollection const & linesId, UserLinesRenderCollection & renderParams,
+                    dp::Batcher & batcher)
+{
+  float const vs = static_cast<float>(df::VisualParams::Instance().GetVisualScale());
+  bool const simplify = tileKey.m_zoomLevel <= kLineSimplifyLevelEnd;
+
+  double sqrScale = 1.0;
+  if (simplify)
+  {
+    double const currentScaleGtoP = 1.0 / GetScale(tileKey.m_zoomLevel);
+    sqrScale = math::sqr(currentScaleGtoP);
   }
 
-  int const kBatchSize = 5000;
-  for (auto it = userLines.begin(); it != userLines.end(); ++it)
+  for (auto id : linesId)
   {
-    TileKey const & key = it->first;
-    dp::Batcher batcher(kBatchSize, kBatchSize);
-    dp::SessionGuard guard(batcher, [&key, &outShapes](dp::GLState const & state,
-                                                       drape_ptr<dp::RenderBucket> && b)
+    auto const it = renderParams.find(id);
+    if (it == renderParams.end())
+      continue;
+
+    UserLineRenderParams const & renderInfo = *it->second.get();
+
+    m2::RectD const tileRect = tileKey.GetGlobalRect();
+
+    double const range = MercatorBounds::maxX - MercatorBounds::minX;
+    double const maxLength = range / (1 << (tileKey.m_zoomLevel - 1));
+
+    bool intersected = false;
+    ProcessSplineSegmentRects(renderInfo.m_spline, maxLength,
+                              [&tileRect, &intersected](m2::RectD const & segmentRect)
     {
-      outShapes.emplace_back(UserMarkShape(state, move(b), key));
+      if (segmentRect.IsIntersect(tileRect))
+        intersected = true;
+      return !intersected;
     });
-    for (auto const & lineData : it->second)
+
+    if (!intersected)
+      continue;
+
+    m2::SharedSpline spline = renderInfo.m_spline;
+    if (simplify)
     {
-      UserLineMark const * line = lineData.first;
-      for (size_t layerIndex = 0; layerIndex < line->GetLayerCount(); ++layerIndex)
+      spline.Reset(new m2::Spline(renderInfo.m_spline->GetSize()));
+
+      static double const kMinSegmentLength = math::sqr(4.0 * vs);
+      m2::PointD lastAddedPoint;
+      for (auto const & point : renderInfo.m_spline->GetPath())
+      {
+        if (spline->GetSize() > 1 && point.SquareLength(lastAddedPoint) * sqrScale < kMinSegmentLength)
+        {
+          spline->ReplacePoint(point);
+        }
+        else
+        {
+          spline->AddPoint(point);
+          lastAddedPoint = point;
+        }
+      }
+    }
+
+    auto const clippedSplines = m2::ClipSplineByRect(tileRect, spline);
+    for (auto const & clippedSpline : clippedSplines)
+    {
+      for (auto const & layer : renderInfo.m_layers)
       {
         LineViewParams params;
-        params.m_tileCenter = key.GetGlobalRect().Center();
+        params.m_tileCenter = tileKey.GetGlobalRect().Center();
         params.m_baseGtoPScale = 1.0f;
         params.m_cap = dp::RoundCap;
         params.m_join = dp::RoundJoin;
-        params.m_color = line->GetColor(layerIndex);
-        params.m_depth = line->GetLayerDepth(layerIndex);
-        params.m_width = line->GetWidth(layerIndex);
+        params.m_color = layer.m_color;
+        params.m_depth = layer.m_depth;
+        params.m_depthLayer = renderInfo.m_depthLayer;
+        params.m_width = layer.m_width * vs * kLineWidthZoomFactor[tileKey.m_zoomLevel];
         params.m_minVisibleScale = 1;
         params.m_rank = 0;
 
-        LineShape(lineData.second, params).Draw(make_ref(&batcher), textures);
+        LineShape(clippedSpline, params).Draw(make_ref(&batcher), textures);
       }
     }
   }
 }
-
-} // namespace
-
-TUserMarkShapes CacheUserMarks(UserMarksProvider const * provider, ref_ptr<dp::TextureManager> textures)
-{
-  TUserMarkShapes shapes;
-  CacheUserPoints(provider, textures, shapes);
-  CacheUserLines(provider, textures, shapes);
-  return shapes;
-}
-
 } // namespace df

@@ -11,6 +11,7 @@ import com.google.android.gms.common.GoogleApiAvailability;
 import com.mapswithme.maps.Framework;
 import com.mapswithme.maps.MwmApplication;
 import com.mapswithme.maps.ads.Banner;
+import com.mapswithme.maps.bookmarks.data.FeatureId;
 import com.mapswithme.maps.bookmarks.data.MapObject;
 import com.mapswithme.maps.routing.RoutingController;
 import com.mapswithme.util.Config;
@@ -214,9 +215,8 @@ public enum LocationHelper
       return null;
 
     if (mMyPosition == null)
-      mMyPosition = new MapObject("", 0L, 0, MapObject.MY_POSITION, "", "", "", "",
-                                  mSavedLocation.getLatitude(), mSavedLocation.getLongitude(), "",
-                                  null, false, "", null);
+      mMyPosition = MapObject.createMapObject(FeatureId.EMPTY, MapObject.MY_POSITION, "", "",
+                                  mSavedLocation.getLatitude(), mSavedLocation.getLongitude());
 
     return mMyPosition;
   }
@@ -373,6 +373,11 @@ public enum LocationHelper
 
       case Framework.ROUTER_TYPE_BICYCLE:
         mInterval = INTERVAL_NAVIGATION_BICYCLE_MS;
+        break;
+
+      case Framework.ROUTER_TYPE_TRANSIT:
+        // TODO: what is the interval should be for transit type?
+        mInterval = INTERVAL_NAVIGATION_PEDESTRIAN_MS;
         break;
 
       default:
@@ -599,7 +604,7 @@ public enum LocationHelper
     {
       notifyLocationUpdated();
       mLogger.d(TAG, "Current location is available, so play the nice zoom animation");
-      Framework.nativeZoomToPoint(location.getLatitude(), location.getLongitude(), 14, true);
+      Framework.nativeRunFirstLaunchAnimation();
       return;
     }
 

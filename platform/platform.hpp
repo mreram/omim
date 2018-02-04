@@ -1,16 +1,22 @@
 #pragma once
 
 #include "platform/country_defines.hpp"
+#include "platform/gui_thread.hpp"
 #include "platform/marketing_service.hpp"
+#include "platform/secure_storage.hpp"
 
 #include "coding/reader.hpp"
 
 #include "base/exception.hpp"
+#include "base/macros.hpp"
+#include "base/task_loop.hpp"
+#include "base/worker_thread.hpp"
 
 #include "std/bitset.hpp"
 #include "std/function.hpp"
 #include "std/map.hpp"
 #include "std/string.hpp"
+#include "std/unique_ptr.hpp"
 #include "std/utility.hpp"
 #include "std/vector.hpp"
 
@@ -55,6 +61,20 @@ public:
     CONNECTION_WWAN
   };
 
+  enum class ChargingStatus : uint8_t
+  {
+    Unknown,
+    Plugged,
+    Unplugged
+  };
+
+  enum class Thread : uint8_t
+  {
+    File,
+    Network,
+    Gui
+  };
+
   using TFilesWithType = vector<pair<string, EFileType>>;
 
 protected:
@@ -78,29 +98,38 @@ protected:
   /// Used in Android only to get corret GUI elements layout.
   bool m_isTablet;
 
-  /// Internal function to get full path for input file.
-  /// Uses m_writeableDir [w], m_resourcesDir [r], m_settingsDir [s].
-  string ReadPathForFile(string const & file, string searchScope = string()) const;
-
   /// Returns last system call error as EError.
   static EError ErrnoToError();
 
   /// Platform-dependent marketing services.
   MarketingService m_marketingService;
 
+  /// Platform-dependent secure storage.
+  platform::SecureStorage m_secureStorage;
+
+  unique_ptr<base::TaskLoop> m_guiThread;
+
+  base::WorkerThread m_networkThread;
+  base::WorkerThread m_fileThread;
+
 public:
   Platform();
+  virtual ~Platform() = default;
 
   static bool IsFileExistsByFullPath(string const & filePath);
+  static void DisableBackupForFile(string const & filePath);
 
-  /// @return true if we can create custom texture allocator in drape
-  static bool IsCustomTextureAllocatorSupported();
+  /// @returns path to current working directory.
+  /// @note In case of an error returns an empty string.
+  static string GetCurrentWorkingDirectory() noexcept;
   /// @return always the same writable dir for current user with slash at the end
   string WritableDir() const { return m_writableDir; }
   /// Set writable dir — use for testing and linux stuff only
   void SetWritableDirForTests(string const & path);
   /// @return full path to file in user's writable directory
   string WritablePathForFile(string const & file) const { return WritableDir() + file; }
+  /// Uses m_writeableDir [w], m_resourcesDir [r], m_settingsDir [s].
+  string ReadPathForFile(string const & file, string searchScope = string()) const;
 
   /// @return resource dir (on some platforms it's differ from Writable dir)
   string ResourcesDir() const { return m_resourcesDir; }
@@ -108,8 +137,12 @@ public:
   /// Client app should not replace default resource dir.
   void SetResourceDir(string const & path);
 
-  /// Creates directory at filesystem
-  EError MkDir(string const & dirName) const;
+  /// Creates the directory in the filesystem.
+  WARN_UNUSED_RESULT static EError MkDir(string const & dirName);
+
+  /// Creates the directory. Returns true on success.
+  /// Returns false and logs the reason on failure.
+  WARN_UNUSED_RESULT static bool MkDirChecked(string const & dirName);
 
   /// Removes empty directory from the filesystem.
   static EError RmDir(string const & dirName);
@@ -130,8 +163,7 @@ public:
   /// @return path for directory in the persistent memory, can be the same
   /// as WritableDir, but on some platforms it's different
   string SettingsDir() const { return m_settingsDir; }
-  /// Set settings dir — use for testing.
-  void SetSettingsDirForTests(string const & path);
+  void SetSettingsDir(string const & path);
   /// @return full path to file in the settings directory
   string SettingsPathForFile(string const & file) const { return SettingsDir() + file; }
 
@@ -157,7 +189,11 @@ public:
   static void GetFilesByType(string const & directory, unsigned typeMask,
                              TFilesWithType & outFiles);
 
+  static void GetFilesRecursively(string const & directory, FilesList & filesList);
+
   static bool IsDirectoryEmpty(string const & directory);
+  // Returns true if |path| refers to a directory. Returns false otherwise or on error.
+  static bool IsDirectory(string const & path);
 
   static EError GetFileType(string const & path, EFileType & type);
 
@@ -178,20 +214,6 @@ public:
   };
   TStorageStatus GetWritableStorageStatus(uint64_t neededSize) const;
   uint64_t GetWritableStorageSpace() const;
-
-  /// @name Functions for concurrent tasks.
-  //@{
-  typedef function<void()> TFunctor;
-  void RunOnGuiThread(TFunctor const & fn);
-  enum Priority
-  {
-    EPriorityBackground,
-    EPriorityLow,
-    EPriorityDefault,
-    EPriorityHigh
-  };
-  void RunAsync(TFunctor const & fn, Priority p = EPriorityDefault);
-  //@}
 
   // Please note, that number of active cores can vary at runtime.
   // DO NOT assume for the same return value between calls.
@@ -226,14 +248,60 @@ public:
   static EConnectionType ConnectionStatus();
   static bool IsConnected() { return ConnectionStatus() != EConnectionType::CONNECTION_NONE; }
 
+  static ChargingStatus GetChargingStatus();
+
   void SetupMeasurementSystem() const;
 
   MarketingService & GetMarketingService() { return m_marketingService; }
+  platform::SecureStorage & GetSecureStorage() { return m_secureStorage; }
+
+  template <typename Task>
+  void RunTask(Thread thread, Task && task)
+  {
+    switch (thread)
+    {
+      case Thread::File:
+        m_fileThread.Push(forward<Task>(task));
+        break;
+      case Thread::Network:
+        m_networkThread.Push(forward<Task>(task));
+        break;
+      case Thread::Gui:
+        RunOnGuiThread(forward<Task>(task));
+        break;
+    }
+  }
+
+  template <typename Task>
+  void RunDelayedTask(Thread thread, base::WorkerThread::Duration const & delay, Task && task)
+  {
+    switch (thread)
+    {
+      case Thread::File:
+        m_fileThread.PushDelayed(delay, forward<Task>(task));
+        break;
+      case Thread::Network:
+        m_networkThread.PushDelayed(delay, forward<Task>(task));
+        break;
+      case Thread::Gui:
+        CHECK(false, ("Delayed tasks for gui thread are not supported yet"));
+        break;
+    }
+  }
+
+  void ShutdownThreads();
+
+  // Use this method for testing purposes only.
+  void SetGuiThread(unique_ptr<base::TaskLoop> guiThread);
 
 private:
+  void RunOnGuiThread(base::TaskLoop::Task && task);
+  void RunOnGuiThread(base::TaskLoop::Task const & task);
+
   void GetSystemFontNames(FilesList & res) const;
 };
 
 extern Platform & GetPlatform();
 
 string DebugPrint(Platform::EError err);
+string DebugPrint(Platform::ChargingStatus status);

@@ -6,8 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.location.Location;
 import android.text.TextUtils;
-
-import java.util.concurrent.CountDownLatch;
+import android.util.Log;
 
 import com.mapswithme.maps.MwmApplication;
 import com.mapswithme.maps.R;
@@ -15,13 +14,22 @@ import com.mapswithme.maps.downloader.CountryItem;
 import com.mapswithme.maps.downloader.MapManager;
 import com.mapswithme.maps.editor.Editor;
 import com.mapswithme.maps.location.LocationHelper;
-import com.mapswithme.util.LocationUtils;
+import com.mapswithme.maps.ugc.UGC;
+import com.mapswithme.util.CrashlyticsUtils;
+import com.mapswithme.util.PermissionsUtils;
 import com.mapswithme.util.concurrency.UiThread;
+import com.mapswithme.util.log.Logger;
+import com.mapswithme.util.log.LoggerFactory;
+
+import java.util.concurrent.CountDownLatch;
 
 public class WorkerService extends IntentService
 {
+  private static final Logger LOGGER = LoggerFactory.INSTANCE.getLogger(LoggerFactory.Type.MISC);
+  private static final String TAG = WorkerService.class.getSimpleName();
   private static final String ACTION_CHECK_LOCATIION = "com.mapswithme.maps.action.check_location";
   private static final String ACTION_UPLOAD_OSM_CHANGES = "com.mapswithme.maps.action.upload_osm_changes";
+  private static final String ACTION_UPLOAD_UGC = "com.mapswithme.maps.action.upload_ugc";
 
   private static final SharedPreferences PREFS = MwmApplication.prefs();
 
@@ -46,16 +54,19 @@ public class WorkerService extends IntentService
     MwmApplication.get().startService(intent);
   }
 
+  /**
+   * Starts this service to upload UGC to our servers.
+   */
+  public static void startActionUploadUGC()
+  {
+    final Intent intent = new Intent(MwmApplication.get(), WorkerService.class);
+    intent.setAction(WorkerService.ACTION_UPLOAD_UGC);
+    MwmApplication.get().startService(intent);
+  }
+
   public WorkerService()
   {
     super("WorkerService");
-  }
-
-  @Override
-  public void onCreate()
-  {
-    super.onCreate();
-    MwmApplication.get().initNativeCore();
   }
 
   @Override
@@ -63,8 +74,11 @@ public class WorkerService extends IntentService
   {
     if (intent != null)
     {
+      String msg = "onHandleIntent: " + intent + " app in background = "
+                   + !MwmApplication.backgroundTracker().isForeground();
+      LOGGER.i(TAG, msg);
+      CrashlyticsUtils.log(Log.INFO, TAG, msg);
       final String action = intent.getAction();
-
       switch (action)
       {
       case ACTION_CHECK_LOCATIION:
@@ -73,6 +87,10 @@ public class WorkerService extends IntentService
 
       case ACTION_UPLOAD_OSM_CHANGES:
         handleActionUploadOsmChanges();
+        break;
+
+      case ACTION_UPLOAD_UGC:
+        handleUploadUGC();
         break;
       }
     }
@@ -121,11 +139,29 @@ public class WorkerService extends IntentService
     Editor.uploadChanges();
   }
 
+  private static void handleUploadUGC()
+  {
+    UGC.nativeUploadUGC();
+  }
+
   @android.support.annotation.UiThread
   private static boolean processLocation()
   {
-    MwmApplication.get().initNativePlatform();
-    MwmApplication.get().initNativeCore();
+    if (!PermissionsUtils.isExternalStorageGranted())
+      return false;
+
+    MwmApplication application = MwmApplication.get();
+    if (!application.arePlatformAndCoreInitialized())
+    {
+      boolean success = application.initCore();
+      if (!success)
+      {
+        String message = "Native part couldn't be initialized successfully";
+        LOGGER.e(TAG, message);
+        CrashlyticsUtils.log(Log.ERROR, TAG, message);
+        return false;
+      }
+    }
 
     Location l = LocationHelper.INSTANCE.getLastKnownLocation();
     if (l == null)

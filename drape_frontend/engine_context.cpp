@@ -11,14 +11,16 @@ namespace df
 EngineContext::EngineContext(TileKey tileKey,
                              ref_ptr<ThreadsCommutator> commutator,
                              ref_ptr<dp::TextureManager> texMng,
-                             CustomSymbolsContextWeakPtr customSymbolsContext,
+                             ref_ptr<MetalineManager> metalineMng,
+                             CustomFeaturesContextWeakPtr customFeaturesContext,
                              bool is3dBuildingsEnabled,
                              bool isTrafficEnabled,
                              int displacementMode)
   : m_tileKey(tileKey)
   , m_commutator(commutator)
   , m_texMng(texMng)
-  , m_customSymbolsContext(customSymbolsContext)
+  , m_metalineMng(metalineMng)
+  , m_customFeaturesContext(customFeaturesContext)
   , m_3dBuildingsEnabled(is3dBuildingsEnabled)
   , m_trafficEnabled(isTrafficEnabled)
   , m_displacementMode(displacementMode)
@@ -27,6 +29,11 @@ EngineContext::EngineContext(TileKey tileKey,
 ref_ptr<dp::TextureManager> EngineContext::GetTextureManager() const
 {
   return m_texMng;
+}
+
+ref_ptr<MetalineManager> EngineContext::GetMetalineManager() const
+{
+  return m_metalineMng;
 }
 
 void EngineContext::BeginReadTile()
@@ -61,5 +68,4 @@ void EngineContext::PostMessage(drape_ptr<Message> && message)
   m_commutator->PostMessage(ThreadsCommutator::ResourceUploadThread, move(message),
                             MessagePriority::Normal);
 }
-
-} // namespace df
+}  // namespace df

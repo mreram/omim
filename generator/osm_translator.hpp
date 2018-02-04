@@ -1,6 +1,7 @@
 #pragma once
 
 #include "generator/feature_builder.hpp"
+#include "generator/metalines_builder.hpp"
 #include "generator/osm2type.hpp"
 #include "generator/osm_element.hpp"
 #include "generator/restriction_writer.hpp"
@@ -18,6 +19,7 @@
 #include "base/logging.hpp"
 #include "base/stl_add.hpp"
 #include "base/string_utils.hpp"
+#include "base/osm_id.hpp"
 
 #include <list>
 #include <type_traits>
@@ -167,7 +169,8 @@ protected:
         if (!ref.empty())
         {
           std::string const & network = e.GetTagValue("network");
-          if (!network.empty() && network.find('/') == std::string::npos)
+          // Not processing networks with more than 15 chars (see road_shields_parser.cpp).
+          if (!network.empty() && network.find('/') == std::string::npos && network.size() < 15)
             ref = network + '/' + ref;
           std::string const & refBase = m_current->GetTag("ref");
           if (!refBase.empty())
@@ -195,6 +198,7 @@ protected:
     bool const isBoundary = (type == "boundary") && IsAcceptBoundary(e);
     bool const processAssociatedStreet = type == "associatedStreet" &&
         TBase::IsKeyTagExists("addr:housenumber") && !TBase::IsKeyTagExists("addr:street");
+    bool const isHighway = TBase::IsKeyTagExists("highway");
 
     for (auto const & p : e.tags)
     {
@@ -214,6 +218,10 @@ protected:
         continue;
 
       if (p.first == "place")
+        continue;
+
+      // Do not pass "ref" tags from boundaries and other, non-route relations to highways.
+      if (p.first == "ref" && isHighway)
         continue;
 
       TBase::AddCustomTag(p);
@@ -236,6 +244,7 @@ class OsmToFeatureTranslator
 
   RelationTagsNode m_nodeRelations;
   RelationTagsWay m_wayRelations;
+  feature::MetalinesBuilder m_metalinesBuilder;
 
   class HolesAccumulator
   {
@@ -355,7 +364,7 @@ class OsmToFeatureTranslator
   }
 
   template <class MakeFnT>
-  void EmitArea(FeatureBuilder1 & ft, FeatureParams params, MakeFnT makeFn) const
+  void EmitArea(FeatureBuilder1 & ft, FeatureParams params, MakeFnT makeFn)
   {
     using namespace feature;
 
@@ -363,9 +372,15 @@ class OsmToFeatureTranslator
     if (!ft.IsGeometryClosed())
       return;
 
+    if (ftypes::IsTownOrCity(params.m_Types))
+    {
+      auto fb = ft;
+      makeFn(fb);
+      m_emitter.EmitCityBoundary(fb, params);
+    }
+
     // Key point here is that IsDrawableLike and RemoveNoDrawableTypes
     // work a bit different for GEOM_AREA.
-
     if (IsDrawableLike(params.m_Types, GEOM_AREA))
     {
       // Make the area feature if it has unique area styles.
@@ -458,6 +473,7 @@ public:
           ft.SetAreaAddHoles(processor.GetHoles());
         });
 
+        m_metalinesBuilder(*p, params);
         EmitLine(ft, params, isCoastLine);
         state = FeatureState::Ok;
         break;
@@ -542,13 +558,16 @@ public:
 
 public:
   OsmToFeatureTranslator(TEmitter & emitter, TCache & holder, uint32_t coastType,
-                         std::string const & addrFilePath = {}, std::string const & restrictionsFilePath = {},
-                         std::string const & roadAccessFilePath = {})
+                         std::string const & addrFilePath = {},
+                         std::string const & restrictionsFilePath = {},
+                         std::string const & roadAccessFilePath = {},
+                         std::string const & metalinesFilePath = {})
     : m_emitter(emitter)
     , m_holder(holder)
     , m_coastType(coastType)
     , m_nodeRelations(m_routingTagsProcessor)
     , m_wayRelations(m_routingTagsProcessor)
+    , m_metalinesBuilder(metalinesFilePath)
   {
     if (!addrFilePath.empty())
       m_addrWriter.reset(new FileWriter(addrFilePath));

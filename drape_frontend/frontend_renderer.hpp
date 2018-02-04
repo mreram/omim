@@ -12,6 +12,7 @@
 #include "drape_frontend/navigator.hpp"
 #include "drape_frontend/overlays_tracker.hpp"
 #include "drape_frontend/render_group.hpp"
+#include "drape_frontend/render_state.hpp"
 #include "drape_frontend/requested_tiles.hpp"
 #include "drape_frontend/route_renderer.hpp"
 #include "drape_frontend/postprocess_renderer.hpp"
@@ -20,7 +21,6 @@
 #include "drape_frontend/traffic_renderer.hpp"
 #include "drape_frontend/user_event_stream.hpp"
 
-#include "drape/glstate.hpp"
 #include "drape/gpu_program_manager.hpp"
 #include "drape/overlay_tree.hpp"
 #include "drape/pointers.hpp"
@@ -53,10 +53,14 @@ class SelectObjectMessage;
 
 struct TapInfo
 {
-  m2::PointD const m_pixelPoint;
+  m2::PointD const m_mercator;
   bool const m_isLong;
   bool const m_isMyPositionTapped;
   FeatureID const m_featureTapped;
+
+  m2::AnyRectD GetDefaultSearchRect(ScreenBase const & screen) const;
+  m2::AnyRectD GetBookmarkSearchRect(ScreenBase const & screen) const;
+  m2::AnyRectD GetRoutingPointSearchRect(ScreenBase const & screen) const;
 };
 
 class FrontendRenderer : public BaseRenderer,
@@ -66,7 +70,7 @@ class FrontendRenderer : public BaseRenderer,
 public:
   using TModelViewChanged = std::function<void(ScreenBase const & screen)>;
   using TTapEventInfoFn = std::function<void(TapInfo const &)>;
-  using TUserPositionChangedFn = std::function<void(m2::PointD const & pt)>;
+  using TUserPositionChangedFn = std::function<void(m2::PointD const & pt, bool hasPosition)>;
 
   struct Params : BaseRenderer::Params
   {
@@ -113,18 +117,17 @@ public:
   void AddUserEvent(drape_ptr<UserEvent> && event);
 
   // MyPositionController::Listener
-  void PositionChanged(m2::PointD const & position) override;
+  void PositionChanged(m2::PointD const & position, bool hasPosition) override;
   void ChangeModelView(m2::PointD const & center, int zoomLevel,
                        TAnimationCreator const & parallelAnimCreator) override;
   void ChangeModelView(double azimuth, TAnimationCreator const & parallelAnimCreator) override;
   void ChangeModelView(m2::RectD const & rect,
                        TAnimationCreator const & parallelAnimCreator) override;
   void ChangeModelView(m2::PointD const & userPos, double azimuth, m2::PointD const & pxZero,
-                       int preferredZoomLevel,
+                       int preferredZoomLevel, Animation::TAction const & onFinishAction,
                        TAnimationCreator const & parallelAnimCreator) override;
   void ChangeModelView(double autoScale, m2::PointD const & userPos, double azimuth,
-                       m2::PointD const & pxZero,
-                       TAnimationCreator const & parallelAnimCreator) override;
+                       m2::PointD const & pxZero, TAnimationCreator const & parallelAnimCreator) override;
 
   drape_ptr<ScenarioManager> const & GetScenarioManager() const;
 
@@ -145,12 +148,23 @@ private:
   void RefreshPivotTransform(ScreenBase const & screen);
   void RefreshBgColor();
 
+  struct RenderLayer
+  {
+    std::vector<drape_ptr<RenderGroup>> m_renderGroups;
+    bool m_isDirty = false;
+
+    void Sort(ref_ptr<dp::OverlayTree> overlayTree);
+  };
   // Render part of scene
   void Render2dLayer(ScreenBase const & modelView);
   void Render3dLayer(ScreenBase const & modelView, bool useFramebuffer);
   void RenderOverlayLayer(ScreenBase const & modelView);
-  void RenderUserMarksLayer(ScreenBase const & modelView);
-  void RenderTrafficAndRouteLayer(ScreenBase const & modelView);
+  void RenderNavigationOverlayLayer(ScreenBase const & modelView);
+  void RenderUserMarksLayer(ScreenBase const & modelView, RenderState::DepthLayer layerId);
+  void RenderTrafficLayer(ScreenBase const & modelView);
+  void RenderRouteLayer(ScreenBase const & modelView);
+
+  bool HasTransitData();
 
   ScreenBase const & ProcessEvents(bool & modelViewChanged, bool & viewportChanged);
   void PrepareScene(ScreenBase const & modelView);
@@ -202,6 +216,7 @@ private:
   void UpdateOverlayTree(ScreenBase const & modelView, drape_ptr<RenderGroup> & renderGroup);
   void EndUpdateOverlayTree();
 
+  template<typename TRenderGroup>
   void AddToRenderGroup(dp::GLState const & state, drape_ptr<dp::RenderBucket> && renderBucket,
                         TileKey const & newTile);
 
@@ -209,6 +224,8 @@ private:
   void RemoveRenderGroupsLater(TRenderGroupRemovePredicate const & predicate);
 
   void FollowRoute(int preferredZoomLevel, int preferredZoomLevelIn3d, bool enableAutoZoom);
+  bool CheckRouteRecaching(ref_ptr<BaseSubrouteData> subrouteData);
+
   void InvalidateRect(m2::RectD const & gRect);
   bool CheckTileGenerations(TileKey const & tileKey);
   void UpdateCanBeDeletedStatus();
@@ -218,8 +235,6 @@ private:
   FeatureID GetVisiblePOI(m2::PointD const & pixelPoint);
   FeatureID GetVisiblePOI(m2::RectD const & pixelRect);
 
-  void PrepareGpsTrackPoints(uint32_t pointsCount);
-
   void PullToBoundArea(bool randomPlace, bool applyZoom);
 
   void ProcessSelection(ref_ptr<SelectObjectMessage> msg);
@@ -228,29 +243,11 @@ private:
 
   void CollectShowOverlaysEvents();
 
+  void CheckAndRunFirstLaunchAnimation();
+
   drape_ptr<dp::GpuProgramManager> m_gpuProgramManager;
 
-  struct RenderLayer
-  {
-    enum RenderLayerID
-    {
-      Geometry2dID,
-      OverlayID,
-      Geometry3dID,
-      LayerCountID
-    };
-
-    static RenderLayerID GetLayerID(dp::GLState const & renderGroup);
-
-    std::vector<drape_ptr<RenderGroup>> m_renderGroups;
-    bool m_isDirty = false;
-
-    void Sort(ref_ptr<dp::OverlayTree> overlayTree);
-  };
-
-  std::array<RenderLayer, RenderLayer::LayerCountID> m_layers;
-  std::vector<drape_ptr<UserMarkRenderGroup>> m_userMarkRenderGroups;
-  std::unordered_set<size_t> m_userMarkVisibility;
+  std::array<RenderLayer, RenderState::LayersCount> m_layers;
 
   drape_ptr<gui::LayerRenderer> m_guiRenderer;
   drape_ptr<MyPositionController> m_myPositionController;
@@ -287,6 +284,7 @@ private:
 
   ref_ptr<RequestedTiles> m_requestedTiles;
   uint64_t m_maxGeneration;
+  uint64_t m_maxUserMarksGeneration;
   int m_mergeBucketsCounter = 0;
 
   int m_lastRecacheRouteId = 0;
@@ -318,10 +316,18 @@ private:
   OverlaysShowStatsCallback m_overlaysShowStatsCallback;
 
   bool m_forceUpdateScene;
+  bool m_forceUpdateUserMarks;
 
   drape_ptr<PostprocessRenderer> m_postprocessRenderer;
 
   drape_ptr<ScenarioManager> m_scenarioManager;
+
+  bool m_firstTilesReady = false;
+  bool m_firstLaunchAnimationTriggered = false;
+  bool m_firstLaunchAnimationInterrupted = false;
+
+  bool m_finishTexturesInitialization = false;
+  drape_ptr<ScreenQuadRenderer> m_transitBackground;
 
 #ifdef DEBUG
   bool m_isTeardowned;

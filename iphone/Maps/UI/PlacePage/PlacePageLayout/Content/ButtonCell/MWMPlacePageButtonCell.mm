@@ -1,6 +1,5 @@
 #import "MWMPlacePageButtonCell.h"
-#import "MWMCommon.h"
-#import "MWMPlacePageProtocol.h"
+#import "MWMPlacePageData.h"
 #import "SwiftBridge.h"
 
 @interface MWMPlacePageButtonCell ()
@@ -92,7 +91,7 @@
   auto btnLayer = titleButton.layer;
   if (isInsetButton)
   {
-    self.backgroundColor = [UIColor clearColor];
+    self.backgroundColor = UIColor.clearColor;
     self.buttonTop.constant = 8;
     self.buttonTrailing.constant = 16;
     self.buttonBottom.constant = 8;
@@ -103,7 +102,7 @@
     [titleButton setBorderHighlightedColor:[UIColor linkBlueHighlighted]];
     btnLayer.borderWidth = 1;
     btnLayer.borderColor = [UIColor linkBlue].CGColor;
-    btnLayer.cornerRadius = 4;
+    btnLayer.cornerRadius = 8;
 
     self.isSeparatorHidden = YES;
   }

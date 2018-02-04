@@ -53,7 +53,7 @@ ResultView::ResultView(string const & name, string const & type, string const & 
 }
 
 ResultView::ResultView(search::Result const & result, QWidget & parent)
-  : ResultView(result.GetString(), result.GetFeatureType(), result.GetAddress(), parent)
+  : ResultView(result.GetString(), result.GetFeatureTypeName(), result.GetAddress(), parent)
 {
 }
 
@@ -63,19 +63,23 @@ ResultView::ResultView(search::Sample::Result const & result, QWidget & parent)
 {
 }
 
-void ResultView::SetEditor(Edits::RelevanceEditor && editor)
+void ResultView::SetEditor(Edits::Editor && editor)
 {
-  m_editor = my::make_unique<Edits::RelevanceEditor>(std::move(editor));
+  m_editor = my::make_unique<Edits::Editor>(std::move(editor));
 
   m_irrelevant->setChecked(false);
   m_relevant->setChecked(false);
   m_vital->setChecked(false);
 
-  switch (m_editor->Get())
+  auto const & r = m_editor->Get();
+  if (!r.m_unknown)
   {
-  case Relevance::Irrelevant: m_irrelevant->setChecked(true); break;
-  case Relevance::Relevant: m_relevant->setChecked(true); break;
-  case Relevance::Vital: m_vital->setChecked(true); break;
+    switch (r.m_relevance)
+    {
+      case Relevance::Irrelevant: m_irrelevant->setChecked(true); break;
+      case Relevance::Relevant: m_relevant->setChecked(true); break;
+      case Relevance::Vital: m_vital->setChecked(true); break;
+    }
   }
 
   setEnabled(true);
@@ -83,10 +87,19 @@ void ResultView::SetEditor(Edits::RelevanceEditor && editor)
 
 void ResultView::Update()
 {
-  if (m_editor && m_editor->HasChanges())
-    setStyleSheet("#result {background: rgba(255, 255, 200, 50%)}");
+  if (m_editor)
+  {
+    if (m_editor->GetType() == Edits::Entry::Type::Created)
+      setStyleSheet("#result {background: rgba(173, 223, 173, 50%)}");
+    else if (m_editor->HasChanges())
+      setStyleSheet("#result {background: rgba(255, 255, 200, 50%)}");
+    else
+      setStyleSheet("");
+  }
   else
+  {
     setStyleSheet("");
+  }
 }
 
 void ResultView::Init()
@@ -111,9 +124,9 @@ void ResultView::Init()
     auto * groupLayout = new QHBoxLayout(group /* parent */);
     group->setLayout(groupLayout);
 
-    m_irrelevant = CreateRatioButton("0", *groupLayout);
-    m_relevant = CreateRatioButton("+1", *groupLayout);
-    m_vital = CreateRatioButton("+2", *groupLayout);
+    m_irrelevant = CreateRatioButton("Irrelevant", *groupLayout);
+    m_relevant = CreateRatioButton("Relevant", *groupLayout);
+    m_vital = CreateRatioButton("Vital", *groupLayout);
 
     layout->addWidget(group);
   }

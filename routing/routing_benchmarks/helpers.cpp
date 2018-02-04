@@ -31,8 +31,9 @@ void TestRouter(routing::IRouter & router, m2::PointD const & startPos,
   LOG(LINFO, ("Calculating routing ...", router.GetName()));
   routing::Route route("");
   my::Timer timer;
-  routing::IRouter::ResultCode const resultCode = router.CalculateRoute(
-      startPos, m2::PointD::Zero() /* startDirection */, finalPos, delegate, route);
+  auto const resultCode = router.CalculateRoute(routing::Checkpoints(startPos, finalPos),
+                                                m2::PointD::Zero() /* startDirection */,
+                                                false /* adjust */, delegate, route);
   double const elapsedSec = timer.ElapsedSeconds();
   TEST_EQUAL(routing::IRouter::NoError, resultCode, ());
   TEST(route.IsValid(), ());
@@ -70,6 +71,8 @@ RoutingTest::RoutingTest(routing::IRoadGraph::Mode mode, set<string> const & nee
   set<string> registeredMaps;
   for (auto const & localFile : localFiles)
   {
+    m_numMwmIds->RegisterFile(localFile.GetCountryFile());
+
     auto const & name = localFile.GetCountryName();
     if (neededMaps.count(name) == 0)
       continue;

@@ -5,6 +5,8 @@ add_definitions("-DOMIM_UNIT_TEST_WITH_QT_EVENT_LOOP")
 set(
   SRC
   address_tests.cpp
+  booking_availability_cache_test.cpp
+  booking_filter_test.cpp
   bookmarks_test.cpp
   chart_generator_tests.cpp
   feature_getters_tests.cpp
@@ -15,6 +17,7 @@ set(
   gps_track_test.cpp
   kmz_unarchive_test.cpp
   mwm_url_tests.cpp
+  search_api_tests.cpp
   transliteration_test.cpp
   working_time_tests.cpp
 )
@@ -23,29 +26,37 @@ omim_add_test(${PROJECT_NAME} ${SRC})
 
 omim_link_libraries(
   ${PROJECT_NAME}
+  search_tests_support
+  generator_tests_support
+  indexer_tests_support
+  generator
   map
   drape_frontend
   routing
   traffic
   routing_common
+  transit
   search
   storage
   tracking
   drape
+  ugc
   indexer
   partners_api
   local_ads
   platform
   editor
+  mwm_diff
+  bsdiff
   geometry
   coding
   base
   freetype
   icu
+  agg
   expat
   protobuf
   jansson
-  osrm
   stats_client
   minizip
   succinct
@@ -55,6 +66,7 @@ omim_link_libraries(
   oauthcpp
   drape_frontend
   drape
+  tess2
   stb_image
   sdf_image
   ${Qt5Widgets_LIBRARIES}

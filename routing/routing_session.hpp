@@ -6,6 +6,8 @@
 #include "routing/turns.hpp"
 #include "routing/turns_notification_manager.hpp"
 
+#include "indexer/index.hpp"
+
 #include "traffic/speed_groups.hpp"
 #include "traffic/traffic_cache.hpp"
 #include "traffic/traffic_info.hpp"
@@ -77,6 +79,7 @@ public:
 
   typedef function<void(Route const &, IRouter::ResultCode)> TReadyCallback;
   typedef function<void(float)> TProgressCallback;
+  typedef function<void(size_t passedCheckpointIdx)> CheckpointCallback;
 
   RoutingSession();
 
@@ -85,14 +88,15 @@ public:
 
   void SetRouter(unique_ptr<IRouter> && router, unique_ptr<OnlineAbsentCountriesFetcher> && fetcher);
 
-  /// @param[in] startPoint and endPoint in mercator
+  /// @param[in] checkpoints in mercator
   /// @param[in] timeoutSec timeout in seconds, if zero then there is no timeout
-  void BuildRoute(m2::PointD const & startPoint, m2::PointD const & endPoint,
+  void BuildRoute(Checkpoints const & checkpoints,
                   uint32_t timeoutSec);
   void RebuildRoute(m2::PointD const & startPoint, TReadyCallback const & readyCallback,
-                    uint32_t timeoutSec, State routeRebuildingState);
+                    uint32_t timeoutSec, State routeRebuildingState, bool adjustToPrevRoute);
 
-  m2::PointD GetEndPoint() const { return m_endPoint; }
+  m2::PointD GetStartPoint() const;
+  m2::PointD GetEndPoint() const;
   bool IsActive() const { return (m_state != RoutingNotActive); }
   bool IsNavigable() const { return (m_state == RouteNotStarted || m_state == OnRoute || m_state == RouteFinished); }
   bool IsBuilt() const { return (IsNavigable() || m_state == RouteNeedRebuild); }
@@ -131,7 +135,6 @@ public:
   traffic::SpeedGroup MatchTraffic(location::RouteMatchingInfo const & routeMatchingInfo) const;
 
   void SetUserCurrentPosition(m2::PointD const & position);
-  m2::PointD const & GetUserCurrentPosition() const;
 
   void ActivateAdditionalFeatures() {}
 
@@ -148,6 +151,7 @@ public:
   void SetReadyCallbacks(TReadyCallback const & buildReadyCallback,
                          TReadyCallback const & rebuildReadyCallback);
   void SetProgressCallback(TProgressCallback const & progressCallback);
+  void SetCheckpointCallback(CheckpointCallback const & checkpointCallback);
 
   // Sound notifications for turn instructions.
   void EnableTurnNotifications(bool enable);
@@ -192,18 +196,20 @@ private:
 
   /// RemoveRoute removes m_route and resets route attributes (m_state, m_lastDistance, m_moveAwayCounter).
   void RemoveRoute();
-  void RemoveRouteImpl();
   void RebuildRouteOnTrafficUpdate();
 
-  bool HasRouteAltitudeImpl() const;
+  // Must be called with locked m_routingSessionMutex
+  void ResetImpl();
+
   double GetCompletionPercent() const;
+  void PassCheckpoints();
 
 private:
   unique_ptr<AsyncRouter> m_router;
   shared_ptr<Route> m_route;
   atomic<State> m_state;
   atomic<bool> m_isFollowing;
-  m2::PointD m_endPoint;
+  Checkpoints m_checkpoints;
   size_t m_lastWarnedSpeedCameraIndex;
   SpeedCameraRestriction m_lastFoundCamera;
   // Index of a last point on a route checked for a speed camera.
@@ -220,7 +226,12 @@ private:
   double m_lastDistance;
   int m_moveAwayCounter;
   m2::PointD m_lastGoodPosition;
+  // |m_currentDirection| is a vector from the position before last good position to last good position.
+  m2::PointD m_currentDirection;
   m2::PointD m_userCurrentPosition;
+  m2::PointD m_userFormerPosition;
+  bool m_userCurrentPositionValid = false;
+  bool m_userFormerPositionValid = false;
 
   // Sound turn notification parameters.
   turns::sound::NotificationManager m_turnNotificationsMgr;
@@ -230,6 +241,7 @@ private:
   TReadyCallback m_buildReadyCallback;
   TReadyCallback m_rebuildReadyCallback;
   TProgressCallback m_progressCallback;
+  CheckpointCallback m_checkpointCallback;
 
   // Statistics parameters
   // Passed distance on route including reroutes
@@ -238,6 +250,8 @@ private:
   int m_routingRebuildCount;
   mutable double m_lastCompletionPercent;
 };
+
+void FormatDistance(double dist, string & value, string & suffix);
 
 string DebugPrint(RoutingSession::State state);
 }  // namespace routing

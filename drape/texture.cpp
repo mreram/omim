@@ -6,8 +6,6 @@
 
 #include "base/math.hpp"
 
-#define ASSERT_ID ASSERT(GetID() != -1, ())
-
 namespace dp
 {
 Texture::ResourceInfo::ResourceInfo(m2::RectF const & texRect) : m_texRect(texRect) {}
@@ -67,7 +65,7 @@ float Texture::GetT(uint32_t y) const
   return m_hwTexture->GetT(y);
 }
 
-int32_t Texture::GetID() const
+uint32_t Texture::GetID() const
 {
   ASSERT(m_hwTexture != nullptr, ());
   return m_hwTexture->GetID();

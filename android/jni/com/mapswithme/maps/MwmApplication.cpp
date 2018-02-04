@@ -1,9 +1,11 @@
-#include "Framework.hpp"
+#include "com/mapswithme/maps/Framework.hpp"
 
-#include "../core/jni_helper.hpp"
-#include "../util/crashlytics.h"
+#include "com/mapswithme/util/crashlytics.h"
 
-#include "../platform/Platform.hpp"
+#include "com/mapswithme/platform/GuiThread.hpp"
+#include "com/mapswithme/platform/Platform.hpp"
+
+#include "com/mapswithme/core/jni_helper.hpp"
 
 crashlytics_context_t * g_crashlytics;
 
@@ -32,11 +34,11 @@ extern "C"
       g_framework = new android::Framework();
   }
 
-  // static void nativeProcessFunctor(long functorPointer);
+  // static void nativeProcessTask(long taskPointer);
   JNIEXPORT void JNICALL
-  Java_com_mapswithme_maps_MwmApplication_nativeProcessFunctor(JNIEnv * env, jclass clazz, jlong functorPointer)
+  Java_com_mapswithme_maps_MwmApplication_nativeProcessTask(JNIEnv * env, jclass clazz, jlong taskPointer)
   {
-    android::Platform::Instance().ProcessFunctor(functorPointer);
+    android::GuiThread::ProcessTask(taskPointer);
   }
 
   // static void nativeAddLocalization(String name, String value);

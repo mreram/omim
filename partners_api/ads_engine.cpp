@@ -1,5 +1,6 @@
 #include "partners_api/ads_engine.hpp"
 #include "partners_api/facebook_ads.hpp"
+#include "partners_api/google_ads.hpp"
 #include "partners_api/mopub_ads.hpp"
 #include "partners_api/rb_ads.hpp"
 

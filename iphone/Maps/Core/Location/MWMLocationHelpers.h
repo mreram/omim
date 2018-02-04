@@ -19,7 +19,7 @@ static inline NSString * formattedSpeedAndAltitude(CLLocation * location)
     [result appendString:[NSString stringWithFormat:@"%@ %@", @"\xE2\x96\xB2", @(measurement_utils::FormatAltitude(location.altitude).c_str())]];
 
   // Speed is actual only for just received location
-  if (location.speed > 0. && [location.timestamp timeIntervalSinceNow] >= -2.0)
+  if (location.speed > 0. && location.timestamp.timeIntervalSinceNow >= -2.0)
   {
     if (result.length)
       [result appendString:@"  "];
@@ -69,24 +69,15 @@ static inline m2::PointD ToMercator(CLLocationCoordinate2D const & l)
 }
 
 static inline m2::PointD ToMercator(ms::LatLon const & l) { return MercatorBounds::FromLatLon(l); }
-static inline void setMyPositionMode(location::EMyPositionMode mode)
+static inline MWMMyPositionMode mwmMyPositionMode(location::EMyPositionMode mode)
 {
-  MWMMyPositionMode mwmMode;
   switch (mode)
   {
-  case location::EMyPositionMode::PendingPosition:
-    mwmMode = MWMMyPositionModePendingPosition;
-    break;
-  case location::EMyPositionMode::NotFollowNoPosition:
-    mwmMode = MWMMyPositionModeNotFollowNoPosition;
-    break;
-  case location::EMyPositionMode::NotFollow: mwmMode = MWMMyPositionModeNotFollow; break;
-  case location::EMyPositionMode::Follow: mwmMode = MWMMyPositionModeFollow; break;
-  case location::EMyPositionMode::FollowAndRotate:
-    mwmMode = MWMMyPositionModeFollowAndRotate;
-    break;
+  case location::EMyPositionMode::PendingPosition: return MWMMyPositionModePendingPosition;
+  case location::EMyPositionMode::NotFollowNoPosition: return MWMMyPositionModeNotFollowNoPosition;
+  case location::EMyPositionMode::NotFollow: return MWMMyPositionModeNotFollow;
+  case location::EMyPositionMode::Follow: return MWMMyPositionModeFollow;
+  case location::EMyPositionMode::FollowAndRotate: return MWMMyPositionModeFollowAndRotate;
   }
-  [MWMLocationManager setMyPositionMode:mwmMode];
 }
-
 }  // namespace MWMLocationHelpers

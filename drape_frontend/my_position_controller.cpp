@@ -184,7 +184,7 @@ void MyPositionController::UpdatePosition()
 
 void MyPositionController::OnUpdateScreen(ScreenBase const & screen)
 {
-  m_pixelRect = screen.isPerspective() ? screen.PixelRectIn3d() : screen.PixelRect();
+  m_pixelRect = screen.PixelRectIn3d();
   m_positionYOffset = screen.isPerspective() ? kPositionOffsetYIn3D : kPositionOffsetY;
   if (m_visiblePixelRect.IsEmptyInterior())
     m_visiblePixelRect = m_pixelRect;
@@ -403,9 +403,6 @@ void MyPositionController::OnLocationUpdate(location::GpsInfo const & info, bool
     m_lastGPSBearing.Reset();
   }
 
-  if (m_listener)
-    m_listener->PositionChanged(Position());
-
   if (m_isPositionAssigned && (!AlmostCurrentPosition(oldPos) || !AlmostCurrentAzimut(oldAzimut)))
   {
     CreateAnim(oldPos, oldAzimut, screen);
@@ -425,10 +422,15 @@ void MyPositionController::OnLocationUpdate(location::GpsInfo const & info, bool
     if (!m_hints.m_isFirstLaunch || !AnimationSystem::Instance().AnimationExists(Animation::Object::MapPlane))
     {
       if (m_mode == location::Follow)
+      {
         ChangeModelView(m_position, kDoNotChangeZoom);
+      }
       else if (m_mode == location::FollowAndRotate)
+      {
         ChangeModelView(m_position, m_drawDirection,
-                        m_isInRouting ? GetRoutingRotationPixelCenter() : m_visiblePixelRect.Center(), kDoNotChangeZoom);
+                        m_isInRouting ? GetRoutingRotationPixelCenter() : m_visiblePixelRect.Center(),
+                        kDoNotChangeZoom);
+      }
     }
   }
   else if (m_mode == location::PendingPosition || m_mode == location::NotFollowNoPosition)
@@ -465,6 +467,9 @@ void MyPositionController::OnLocationUpdate(location::GpsInfo const & info, bool
   m_positionIsObsolete = false;
   SetIsVisible(true);
 
+  if (m_listener != nullptr)
+    m_listener->PositionChanged(Position(), IsModeHasPosition());
+
   double const kEps = 1e-5;
   if (fabs(m_lastLocationTimestamp - info.m_timestamp) > kEps)
   {
@@ -479,6 +484,8 @@ void MyPositionController::LoseLocation()
   {
     ChangeMode(location::NotFollowNoPosition);
     SetIsVisible(false);
+    if (m_listener != nullptr)
+      m_listener->PositionChanged(Position(), false /* hasPosition */);
   }
 }
 
@@ -682,14 +689,16 @@ void MyPositionController::ChangeModelView(m2::RectD const & rect)
 }
 
 void MyPositionController::ChangeModelView(m2::PointD const & userPos, double azimuth,
-                                           m2::PointD const & pxZero, int zoomLevel)
+                                           m2::PointD const & pxZero, int zoomLevel,
+                                           Animation::TAction const & onFinishAction)
 {
   if (m_listener)
-    m_listener->ChangeModelView(userPos, azimuth, pxZero, zoomLevel, m_animCreator);
+    m_listener->ChangeModelView(userPos, azimuth, pxZero, zoomLevel, onFinishAction, m_animCreator);
   m_animCreator = nullptr;
 }
 
-void MyPositionController::ChangeModelView(double autoScale, m2::PointD const & userPos, double azimuth, m2::PointD const & pxZero)
+void MyPositionController::ChangeModelView(double autoScale, m2::PointD const & userPos, double azimuth,
+                                           m2::PointD const & pxZero)
 {
   if (m_listener)
     m_listener->ChangeModelView(autoScale, userPos, azimuth, pxZero, m_animCreator);
@@ -811,7 +820,11 @@ void MyPositionController::ActivateRouting(int zoomLevel, bool enableAutoZoom)
 
     ChangeMode(location::FollowAndRotate);
     ChangeModelView(m_position, m_isDirectionAssigned ? m_drawDirection : 0.0,
-                    GetRoutingRotationPixelCenter(), zoomLevel);
+                    GetRoutingRotationPixelCenter(), zoomLevel,
+                    [this](ref_ptr<Animation> anim)
+                    {
+                      UpdateViewport(kDoNotChangeZoom);
+                    });
 
   }
 }

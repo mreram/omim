@@ -68,17 +68,6 @@ bool IsMiddleTunnel(int const layer, double const depth)
   return layer != feature::LAYER_EMPTY && depth < 19000;
 }
 
-void FilterRulesByRuntimeSelector(FeatureType const & f, int zoomLevel, drule::KeysT & keys)
-{
-  keys.erase_if([&f, zoomLevel](drule::Key const & key)->bool
-  {
-    drule::BaseRule const * const rule = drule::rules().Find(key);
-    if (rule == nullptr)
-      return true;
-    return !rule->TestFeature(f, zoomLevel);
-  });
-}
-
 class Aggregator
 {
 public:
@@ -189,23 +178,9 @@ IsBuildingHasPartsChecker::IsBuildingHasPartsChecker()
   m_types.push_back(classif().GetTypeByPath({"building", "has_parts"}));
 }
 
-// static
-IsBuildingHasPartsChecker const & IsBuildingHasPartsChecker::Instance()
-{
-  static IsBuildingHasPartsChecker const inst;
-  return inst;
-}
-
 IsBuildingPartChecker::IsBuildingPartChecker() : BaseChecker(1 /* level */)
 {
   m_types.push_back(classif().GetTypeByPath({"building:part"}));
-}
-
-// static
-IsBuildingPartChecker const & IsBuildingPartChecker::Instance()
-{
-  static IsBuildingPartChecker const inst;
-  return inst;
 }
 
 IsHatchingTerritoryChecker::IsHatchingTerritoryChecker()
@@ -218,14 +193,6 @@ IsHatchingTerritoryChecker::IsHatchingTerritoryChecker()
     m_types.push_back(c.GetTypeByPath({p[0], p[1]}));
 }
 
-// static
-IsHatchingTerritoryChecker const & IsHatchingTerritoryChecker::Instance()
-{
-  static IsHatchingTerritoryChecker const inst;
-  return inst;
-}
-
-
 void CaptionDescription::Init(FeatureType const & f,
                               int8_t deviceLang,
                               int const zoomLevel,
@@ -237,6 +204,11 @@ void CaptionDescription::Init(FeatureType const & f,
     f.GetPreferredNames(true /* allowTranslit */, deviceLang, m_mainText, m_auxText);
   else
     f.GetReadableName(true /* allowTranslit */, deviceLang, m_mainText);
+
+  // Set max text size to avoid VB/IB overflow in rendering.
+  size_t constexpr kMaxTextSize = 200;
+  if (m_mainText.size() > kMaxTextSize)
+    m_mainText = m_mainText.substr(0, kMaxTextSize) + "...";
 
   m_roadNumber = f.GetRoadNumber();
   m_houseNumber = f.GetHouseNumber();
@@ -258,15 +230,6 @@ string const & CaptionDescription::GetAuxText() const
 string const & CaptionDescription::GetRoadNumber() const
 {
   return m_roadNumber;
-}
-
-string CaptionDescription::GetPathName() const
-{
-  // Always concat names for linear features because we process only one draw rule now.
-  if (m_mainText.empty())
-    return m_mainText;
-  else
-    return m_mainText + "   " + m_auxText;
 }
 
 bool CaptionDescription::IsNameExists() const
@@ -382,7 +345,7 @@ bool InitStylist(FeatureType const & f, int8_t deviceLang, int const zoomLevel, 
   drule::KeysT keys;
   pair<int, bool> const geomType = feature::GetDrawRule(types, zoomLevel, keys);
 
-  FilterRulesByRuntimeSelector(f, zoomLevel, keys);
+  feature::FilterRulesByRuntimeSelector(f, zoomLevel, keys);
 
   if (keys.empty())
     return false;
@@ -433,7 +396,7 @@ double GetFeaturePriority(FeatureType const & f, int const zoomLevel)
   drule::KeysT keys;
   pair<int, bool> const geomType = feature::GetDrawRule(f, zoomLevel, keys);
 
-  FilterRulesByRuntimeSelector(f, zoomLevel, keys);
+  feature::FilterRulesByRuntimeSelector(f, zoomLevel, keys);
 
   feature::EGeomType const mainGeomType = feature::EGeomType(geomType.first);
 

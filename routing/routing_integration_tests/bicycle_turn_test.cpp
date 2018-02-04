@@ -9,95 +9,105 @@ using namespace routing::turns;
 
 UNIT_TEST(RussiaMoscowSevTushinoParkBicycleWayTurnTest)
 {
-  TRouteResult const routeResult = integration::CalculateRoute(
-      integration::GetBicycleComponents(), MercatorBounds::FromLatLon(55.87467, 37.43658),
-      {0.0, 0.0}, MercatorBounds::FromLatLon(55.8719, 37.4464));
+  TRouteResult const routeResult =
+      integration::CalculateRoute(integration::GetVehicleComponents<VehicleType::Bicycle>(),
+                                  MercatorBounds::FromLatLon(55.87467, 37.43658), {0.0, 0.0},
+                                  MercatorBounds::FromLatLon(55.8719, 37.4464));
 
   Route const & route = *routeResult.first;
   IRouter::ResultCode const result = routeResult.second;
   TEST_EQUAL(result, IRouter::NoError, ());
 
-  integration::TestTurnCount(route, 1);
-  integration::GetNthTurn(route, 0).TestValid().TestDirection(TurnDirection::TurnLeft);
+  integration::TestTurnCount(route, 2 /* expectedTurnCount */);
+  integration::GetNthTurn(route, 0).TestValid().TestDirection(CarDirection::TurnLeft);
+  integration::GetNthTurn(route, 1).TestValid().TestDirection(CarDirection::TurnLeft);
   integration::TestRouteLength(route, 1054.0);
 }
 
 UNIT_TEST(RussiaMoscowGerPanfilovtsev22BicycleWayTurnTest)
 {
-  TRouteResult const routeResult = integration::CalculateRoute(
-      integration::GetBicycleComponents(), MercatorBounds::FromLatLon(55.85630, 37.41004),
-      {0.0, 0.0}, MercatorBounds::FromLatLon(55.85717, 37.41052));
+  TRouteResult const routeResult =
+      integration::CalculateRoute(integration::GetVehicleComponents<VehicleType::Bicycle>(),
+                                  MercatorBounds::FromLatLon(55.85630, 37.41004), {0.0, 0.0},
+                                  MercatorBounds::FromLatLon(55.85717, 37.41052));
 
   Route const & route = *routeResult.first;
   IRouter::ResultCode const result = routeResult.second;
   TEST_EQUAL(result, IRouter::NoError, ());
 
-  integration::TestTurnCount(route, 2);
+  integration::TestTurnCount(route, 2 /* expectedTurnCount */);
 
-  integration::GetNthTurn(route, 0).TestValid().TestDirection(TurnDirection::TurnLeft);
-  integration::GetNthTurn(route, 1).TestValid().TestDirection(TurnDirection::TurnLeft);
+  integration::GetNthTurn(route, 0).TestValid().TestDirection(CarDirection::TurnLeft);
+  integration::GetNthTurn(route, 1).TestValid().TestDirection(CarDirection::TurnLeft);
 }
 
+// Fails to generate direction.
 UNIT_TEST(RussiaMoscowSalameiNerisPossibleTurnCorrectionBicycleWayTurnTest)
 {
-  TRouteResult const routeResult = integration::CalculateRoute(
-      integration::GetBicycleComponents(), MercatorBounds::FromLatLon(55.85159, 37.38903),
-      {0.0, 0.0}, MercatorBounds::FromLatLon(55.85157, 37.38813));
+  TRouteResult const routeResult =
+      integration::CalculateRoute(integration::GetVehicleComponents<VehicleType::Bicycle>(),
+                                  MercatorBounds::FromLatLon(55.85777, 37.3679), {0.0, 0.0},
+                                  MercatorBounds::FromLatLon(55.85579, 37.36867));
 
   Route const & route = *routeResult.first;
   IRouter::ResultCode const result = routeResult.second;
   TEST_EQUAL(result, IRouter::NoError, ());
 
-  integration::TestTurnCount(route, 1);
-
-  integration::GetNthTurn(route, 0).TestValid().TestDirection(TurnDirection::GoStraight);
+  integration::TestTurnCount(route, 1 /* expectedTurnCount */);
+  integration::GetNthTurn(route, 0).TestValid()
+                                   .TestOneOfDirections({CarDirection::GoStraight,
+                                                         CarDirection::TurnSlightRight,
+                                                         CarDirection::TurnRight});
 }
 
+// Fails to build one-point route.
 UNIT_TEST(RussiaMoscowSevTushinoParkBicycleOnePointTurnTest)
 {
   m2::PointD const point = MercatorBounds::FromLatLon(55.8719, 37.4464);
-  TRouteResult const routeResult =
-      integration::CalculateRoute(integration::GetBicycleComponents(), point, {0.0, 0.0}, point);
+  TRouteResult const routeResult = integration::CalculateRoute(
+      integration::GetVehicleComponents<VehicleType::Bicycle>(), point, {0.0, 0.0}, point);
 
   IRouter::ResultCode const result = routeResult.second;
-  TEST_EQUAL(result, IRouter::IRouter::RouteNotFound, ());
+  TEST_EQUAL(result, IRouter::IRouter::NoError, ());
 }
 
-UNIT_TEST(RussiaMoscowPlanernaiOnewayCarRoadTurnTest)
+UNIT_TEST(RussiaMoscowTatishchevaOnewayCarRoadTurnTest)
 {
-  TRouteResult const routeResult = integration::CalculateRoute(
-      integration::GetBicycleComponents(), MercatorBounds::FromLatLon(55.87012, 37.44028),
-      {0.0, 0.0}, MercatorBounds::FromLatLon(55.87153, 37.43928));
+  TRouteResult const routeResult =
+      integration::CalculateRoute(integration::GetVehicleComponents<VehicleType::Bicycle>(),
+                                  MercatorBounds::FromLatLon(55.71566, 37.61569), {0.0, 0.0},
+                                  MercatorBounds::FromLatLon(55.71532, 37.61571));
 
   Route const & route = *routeResult.first;
   IRouter::ResultCode const result = routeResult.second;
   TEST_EQUAL(result, IRouter::NoError, ());
 
-  integration::TestTurnCount(route, 4);
+  integration::TestTurnCount(route, 4 /* expectedTurnCount */);
 
-  integration::GetNthTurn(route, 0).TestValid().TestDirection(TurnDirection::TurnLeft);
-  integration::GetNthTurn(route, 1).TestValid().TestDirection(TurnDirection::TurnLeft);
-  integration::GetNthTurn(route, 2).TestValid().TestDirection(TurnDirection::TurnSlightRight);
-  integration::GetNthTurn(route, 3).TestValid().TestDirection(TurnDirection::TurnLeft);
+  integration::GetNthTurn(route, 0).TestValid().TestDirection(CarDirection::TurnLeft);
+  integration::GetNthTurn(route, 1).TestValid().TestDirection(CarDirection::TurnLeft);
+  integration::GetNthTurn(route, 2).TestValid().TestDirection(CarDirection::TurnLeft);
+  integration::GetNthTurn(route, 3).TestValid().TestDirection(CarDirection::TurnLeft);
 
-  integration::TestRouteLength(route, 420.0);
+  integration::TestRouteLength(route, 675.0);
 }
 
 UNIT_TEST(RussiaMoscowSvobodiOnewayBicycleWayTurnTest)
 {
-  TRouteResult const routeResult = integration::CalculateRoute(
-      integration::GetBicycleComponents(), MercatorBounds::FromLatLon(55.87277, 37.44002),
-      {0.0, 0.0}, MercatorBounds::FromLatLon(55.87362, 37.43853));
+  TRouteResult const routeResult =
+      integration::CalculateRoute(integration::GetVehicleComponents<VehicleType::Bicycle>(),
+                                  MercatorBounds::FromLatLon(55.87277, 37.44002), {0.0, 0.0},
+                                  MercatorBounds::FromLatLon(55.87362, 37.43853));
 
   Route const & route = *routeResult.first;
   IRouter::ResultCode const result = routeResult.second;
   TEST_EQUAL(result, IRouter::NoError, ());
 
-  integration::TestTurnCount(route, 3);
+  integration::TestTurnCount(route, 3 /* expectedTurnCount */);
 
-  integration::GetNthTurn(route, 0).TestValid().TestDirection(TurnDirection::TurnLeft);
-  integration::GetNthTurn(route, 1).TestValid().TestDirection(TurnDirection::TurnLeft);
-  integration::GetNthTurn(route, 2).TestValid().TestDirection(TurnDirection::TurnLeft);
+  integration::GetNthTurn(route, 0).TestValid().TestDirection(CarDirection::TurnLeft);
+  integration::GetNthTurn(route, 1).TestValid().TestDirection(CarDirection::TurnLeft);
+  integration::GetNthTurn(route, 2).TestValid().TestDirection(CarDirection::TurnLeft);
 
   integration::TestRouteLength(route, 768.0);
 }

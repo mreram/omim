@@ -1,6 +1,8 @@
 #include "androidoglcontextfactory.hpp"
 #include "android_gl_utils.hpp"
 
+#include "com/mapswithme/platform/Platform.hpp"
+
 #include "base/assert.hpp"
 #include "base/logging.hpp"
 #include "base/src_point.hpp"
@@ -12,6 +14,8 @@
 #include <android/native_window_jni.h>
 
 #define EGL_OPENGL_ES3_BIT 0x00000040
+
+int constexpr kMinSdkVersionForES3 = 21;
 
 namespace android
 {
@@ -68,7 +72,7 @@ bool IsSupportedRGB8(EGLDisplay display, bool es3)
   EGLConfig configs[kMaxConfigCount];
   int count = 0;
   return eglChooseConfig(display, getConfigAttributesListRGB8(es3), configs,
-                         kMaxConfigCount, &count) == EGL_TRUE;
+                         kMaxConfigCount, &count) == EGL_TRUE && count != 0;
 }
 }  // namespace
 
@@ -99,7 +103,15 @@ AndroidOGLContextFactory::AndroidOGLContextFactory(JNIEnv * env, jobject jsurfac
     return;
   }
 
-  m_supportedES3 = gl3stubInit() && IsSupportedRGB8(m_display, true /* es3 */);
+  // Check ES3 availability.
+  bool availableES3 = IsSupportedRGB8(m_display, true /* es3 */);
+  if (availableES3)
+  {
+    int const sdkVersion = GetAndroidSdkVersion();
+    if (sdkVersion != 0)
+      availableES3 = (sdkVersion >= kMinSdkVersionForES3);
+  }
+  m_supportedES3 = availableES3 && gl3stubInit();
 
   SetSurface(env, jsurface);
 

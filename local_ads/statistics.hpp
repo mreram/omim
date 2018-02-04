@@ -9,7 +9,6 @@
 #include <functional>
 #include <list>
 #include <map>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -33,14 +32,12 @@ public:
   };
 
   Statistics() = default;
-  ~Statistics();
 
   void Startup();
-  void Teardown();
 
   void SetUserId(std::string const & userId);
 
-  void SetCustomServerSerializer(ServerSerializer && serializer);
+  void SetCustomServerSerializer(ServerSerializer const & serializer);
 
   void RegisterEvent(Event && event);
   void RegisterEvents(std::list<Event> && events);
@@ -52,9 +49,6 @@ public:
   void CleanupAfterTesting();
 
 private:
-  void ThreadRoutine();
-  bool RequestEvents(std::list<Event> & events, bool & needToSend);
-
   void IndexMetadata();
   void ExtractMetadata(std::string const & fileName);
   void BalanceMemory();
@@ -79,17 +73,8 @@ private:
     }
   };
   std::map<MetadataKey, Metadata> m_metadataCache;
-  Timestamp m_lastSending;
-  bool m_isFirstSending = true;
 
   std::string m_userId;
   ServerSerializer m_serverSerializer;
-
-  bool m_isRunning = false;
-  std::list<Event> m_events;
-
-  std::condition_variable m_condition;
-  std::mutex m_mutex;
-  threads::SimpleThread m_thread;
 };
 }  // namespace local_ads

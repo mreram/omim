@@ -31,10 +31,8 @@ Java_com_mapswithme_maps_bookmarks_data_BookmarkCategory_nativeSetVisibility(
     JNIEnv * env, jobject thiz, jint id, jboolean b)
 {
   BookmarkCategory * pCat = getBmCategory(id);
-  {
-    BookmarkCategory::Guard guard(*pCat);
-    guard.m_controller.SetIsVisible(b);
-  }
+  pCat->SetIsVisible(b);
+  pCat->NotifyChanges();
   pCat->SaveToKMLFile();
 }
 
@@ -111,7 +109,7 @@ Java_com_mapswithme_maps_bookmarks_data_BookmarkCategory_nativeGetTrack(
 
   dp::Color nColor = nTrack->GetColor(0);
 
-  jint androidColor = shift(nColor.GetAlfa(), 24) +
+  jint androidColor = shift(nColor.GetAlpha(), 24) +
                       shift(nColor.GetRed(), 16) +
                       shift(nColor.GetGreen(), 8) +
                       nColor.GetBlue();

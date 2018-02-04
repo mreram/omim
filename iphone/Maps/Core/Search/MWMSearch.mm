@@ -1,9 +1,7 @@
 #import "MWMSearch.h"
 #import <Crashlytics/Crashlytics.h>
-#import "MWMAlertViewController.h"
 #import "MWMBannerHelpers.h"
-#import "MWMCommon.h"
-#import "MWMLocationManager.h"
+#import "MWMFrameworkListener.h"
 #import "MWMSearchHotelsFilterViewController.h"
 #import "SwiftBridge.h"
 
@@ -11,39 +9,37 @@
 
 #include "partners_api/ads_engine.hpp"
 
-#include "search/everywhere_search_params.hpp"
-#include "search/hotels_classifier.hpp"
-#include "search/query_saver.hpp"
-#include "search/viewport_search_params.hpp"
+#include "map/everywhere_search_params.hpp"
+#include "map/viewport_search_params.hpp"
+
+extern NSString * const kLuggageCategory;
 
 namespace
 {
-using TObserver = id<MWMSearchObserver>;
-using TObservers = NSHashTable<__kindof TObserver>;
+using Observer = id<MWMSearchObserver>;
+using Observers = NSHashTable<Observer>;
 }  // namespace
 
-@interface MWMSearch ()
+@interface MWMSearch ()<MWMFrameworkDrapeObserver>
 
 @property(nonatomic) NSUInteger suggestionsCount;
 @property(nonatomic) BOOL searchOnMap;
 
 @property(nonatomic) BOOL textChanged;
 
-@property(nonatomic) TObservers * observers;
+@property(nonatomic) Observers * observers;
 
-@property(nonatomic) NSUInteger lastSearchStamp;
+@property(nonatomic) NSUInteger lastSearchTimestamp;
 
-@property(nonatomic) BOOL isHotelResults;
 @property(nonatomic) MWMSearchFilterViewController * filter;
-
-@property(nonatomic) BOOL everywhereSearchCompleted;
-@property(nonatomic) BOOL viewportSearchCompleted;
-
-@property(nonatomic) BOOL viewportResultsEmpty;
 
 @property(nonatomic) MWMSearchIndex * itemsIndex;
 
 @property(nonatomic) MWMSearchBanners * banners;
+
+@property(nonatomic) NSInteger searchCount;
+
+@property(copy, nonatomic) NSString * lastQuery;
 
 @end
 
@@ -52,8 +48,9 @@ using TObservers = NSHashTable<__kindof TObserver>;
   search::EverywhereSearchParams m_everywhereParams;
   search::ViewportSearchParams m_viewportParams;
   search::Results m_everywhereResults;
-  vector<bool> m_isLocalAdsCustomer;
-  string m_filterQuery;
+  search::Results m_viewportResults;
+  std::vector<FeatureID> m_bookingAvailableFeatureIDs;
+  std::vector<search::ProductInfo> m_productInfo;
 }
 
 #pragma mark - Instance
@@ -72,80 +69,58 @@ using TObservers = NSHashTable<__kindof TObserver>;
 {
   self = [super init];
   if (self)
-    _observers = [TObservers weakObjectsHashTable];
+  {
+    _observers = [Observers weakObjectsHashTable];
+    [MWMFrameworkListener addObserver:self];
+  }
   return self;
 }
 
-- (void)updateCallbacks
+- (void)searchEverywhere
 {
-  NSUInteger const timestamp = ++self.lastSearchStamp;
-  {
-    __weak auto weakSelf = self;
-    m_everywhereParams.m_onResults = [weakSelf, timestamp](
-        search::Results const & results, vector<bool> const & isLocalAdsCustomer) {
-      __strong auto self = weakSelf;
-      if (!self)
-        return;
-      if (timestamp != self.lastSearchStamp)
-        return;
+  self.lastSearchTimestamp += 1;
+  NSUInteger const timestamp = self.lastSearchTimestamp;
+  m_everywhereParams.m_onResults = [self, timestamp](
+                                       search::Results const & results,
+                                       std::vector<search::ProductInfo> const & productInfo) {
 
+    if (timestamp == self.lastSearchTimestamp)
+    {
       self->m_everywhereResults = results;
-      self->m_isLocalAdsCustomer = isLocalAdsCustomer;
+      self->m_productInfo = productInfo;
       self.suggestionsCount = results.GetSuggestsCount();
 
-      if (results.IsEndMarker())
-      {
-        [self checkIsHotelResults:results];
-        if (results.IsEndedNormal())
-        {
-          self.everywhereSearchCompleted = YES;
-          if (IPAD || self.searchOnMap)
-          {
-            auto & f = GetFramework();
-            f.ShowSearchResults(m_everywhereResults);
-            f.SearchInViewport(m_viewportParams);
-          }
-        }
-        [self updateItemsIndexWithBannerReload:YES];
-        [self onSearchCompleted];
-      }
-      else
-      {
-        [self updateItemsIndexWithBannerReload:NO];
+      [self onSearchResultsUpdated];
+    }
+
+    if (results.IsEndMarker())
+      self.searchCount -= 1;
+  };
+
+  m_everywhereParams.m_bookingFilterParams.m_callback =
+      [self](booking::AvailabilityParams const & params,
+             std::vector<FeatureID> const & sortedFeatures) {
+        if (self->m_everywhereParams.m_bookingFilterParams.m_params != params)
+          return;
+        self->m_bookingAvailableFeatureIDs = sortedFeatures;
         [self onSearchResultsUpdated];
-      }
-    };
-  }
-  {
-    __weak auto weakSelf = self;
-    m_viewportParams.m_onStarted = [weakSelf] {
-      __strong auto self = weakSelf;
-      if (!self)
-        return;
-      [self onSearchStarted];
-    };
-  }
-  {
-    __weak auto weakSelf = self;
-    m_viewportParams.m_onCompleted = [weakSelf](search::Results const & results) {
-      __strong auto self = weakSelf;
-      if (!self)
-        return;
-      if (results.IsEndedNormal())
-      {
-        [self checkIsHotelResults:results];
-        self.viewportResultsEmpty = results.GetCount() == 0;
-        self.viewportSearchCompleted = YES;
-      }
-      [self onSearchCompleted];
-    };
-  }
+      };
+
+  GetFramework().SearchEverywhere(m_everywhereParams);
+  self.searchCount += 1;
 }
 
-- (void)checkIsHotelResults:(search::Results const &)results
+- (void)searchInViewport
 {
-  self.isHotelResults = search::HotelsClassifier::IsHotelResults(results);
-  m_filterQuery = m_everywhereParams.m_query;
+  m_viewportParams.m_onStarted = [self] { self.searchCount += 1; };
+  m_viewportParams.m_onCompleted = [self](search::Results const & results) {
+    if (!results.IsEndMarker())
+      return;
+    self->m_viewportResults = results;
+    self.searchCount -= 1;
+  };
+
+  GetFramework().SearchInViewport(m_viewportParams);
 }
 
 - (void)updateFilters
@@ -153,18 +128,32 @@ using TObservers = NSHashTable<__kindof TObserver>;
   shared_ptr<search::hotels_filter::Rule> const hotelsRules = self.filter ? [self.filter rules] : nullptr;
   m_viewportParams.m_hotelsFilter = hotelsRules;
   m_everywhereParams.m_hotelsFilter = hotelsRules;
+
+  auto const availabilityParams =
+      self.filter ? [self.filter availabilityParams] : booking::filter::availability::Params();
+  m_viewportParams.m_bookingFilterParams = availabilityParams;
+  m_everywhereParams.m_bookingFilterParams = availabilityParams;
 }
 
 - (void)update
 {
-  [MWMSearch reset];
+  [self reset];
   if (m_everywhereParams.m_query.empty())
     return;
-  [self updateCallbacks];
   [self updateFilters];
-  auto & f = GetFramework();
-  f.SearchEverywhere(m_everywhereParams);
-  [self onSearchStarted];
+
+  if (IPAD)
+  {
+    [self searchInViewport];
+    [self searchEverywhere];
+  }
+  else
+  {
+    if (self.searchOnMap)
+      [self searchInViewport];
+    else
+      [self searchEverywhere];
+  }
 }
 
 #pragma mark - Add/Remove Observers
@@ -205,10 +194,17 @@ using TObservers = NSHashTable<__kindof TObserver>;
     manager->m_everywhereParams.m_inputLocale = locale;
     manager->m_viewportParams.m_inputLocale = locale;
   }
-  string const text = query.precomposedStringWithCompatibilityMapping.UTF8String;
+  manager.lastQuery = query.precomposedStringWithCompatibilityMapping;
+  string const text = manager.lastQuery.UTF8String;
   manager->m_everywhereParams.m_query = text;
   manager->m_viewportParams.m_query = text;
   manager.textChanged = YES;
+  auto const & adsEngine = GetFramework().GetAdsEngine();
+  if (![MWMSettings adForbidden] && adsEngine.HasSearchBanner())
+  {
+    auto coreBanners = banner_helpers::MatchPriorityBanners(adsEngine.GetSearchBanners(), manager.lastQuery);
+    [[MWMBannersCache cache] refreshWithCoreBanners:coreBanners];
+  }
   [manager update];
 }
 
@@ -218,14 +214,25 @@ using TObservers = NSHashTable<__kindof TObserver>;
   return [MWMSearch manager]->m_everywhereResults[index];
 }
 
-+ (BOOL)isLocalAdsWithContainerIndex:(NSUInteger)index
++ (search::ProductInfo const &)productInfoWithContainerIndex:(NSUInteger)index
 {
-  return [MWMSearch manager]->m_isLocalAdsCustomer[index];
+  return [MWMSearch manager]->m_productInfo[index];
 }
 
 + (id<MWMBanner>)adWithContainerIndex:(NSUInteger)index
 {
   return [[MWMSearch manager].banners bannerAtIndex:index];
+}
+
++ (BOOL)isBookingAvailableWithContainerIndex:(NSUInteger)index
+{
+  auto const & result = [self resultWithContainerIndex:index];
+  if (result.GetResultType() != search::Result::Type::Feature)
+    return NO;
+  auto const & resultFeatureID = result.GetFeatureID();
+  auto const & bookingAvailableIDs = [MWMSearch manager]->m_bookingAvailableFeatureIDs;
+  return std::binary_search(bookingAvailableIDs.begin(), bookingAvailableIDs.end(),
+                            resultFeatureID);
 }
 
 + (MWMSearchItemType)resultTypeWithRow:(NSUInteger)row
@@ -242,46 +249,60 @@ using TObservers = NSHashTable<__kindof TObserver>;
 
 + (void)update { [[MWMSearch manager] update]; }
 
-+ (void)reset
+- (void)reset
 {
-  auto manager = [MWMSearch manager];
-  manager.lastSearchStamp++;
+  self.lastSearchTimestamp += 1;
   GetFramework().CancelAllSearches();
-  manager.everywhereSearchCompleted = NO;
-  manager.viewportSearchCompleted = NO;
-  if (manager->m_filterQuery != manager->m_everywhereParams.m_query)
-    manager.isHotelResults = NO;
-  [manager onSearchResultsUpdated];
+
+  m_everywhereResults.Clear();
+  m_viewportResults.Clear();
+
+  m_bookingAvailableFeatureIDs.clear();
+  auto const availabilityParams = booking::filter::availability::Params();
+  m_viewportParams.m_bookingFilterParams = availabilityParams;
+  m_everywhereParams.m_bookingFilterParams = availabilityParams;
+
+  [self onSearchResultsUpdated];
 }
 
 + (void)clear
 {
   auto manager = [MWMSearch manager];
-  manager->m_everywhereResults.Clear();
+  manager->m_everywhereParams.m_query.clear();
+  manager->m_viewportParams.m_query.clear();
   manager.suggestionsCount = 0;
-  [manager updateItemsIndexWithBannerReload:YES];
-  [self reset];
+  manager.filter = nil;
+  [manager reset];
 }
-
-+ (BOOL)isSearchOnMap { return [MWMSearch manager].searchOnMap; }
 
 + (void)setSearchOnMap:(BOOL)searchOnMap
 {
+  if (IPAD)
+    return;
   MWMSearch * manager = [MWMSearch manager];
   if (manager.searchOnMap == searchOnMap)
     return;
   manager.searchOnMap = searchOnMap;
-  if (!IPAD)
-    [manager update];
+  if (searchOnMap && ![MWMRouter isRoutingActive])
+    GetFramework().ShowSearchResults(manager->m_everywhereResults);
+  [manager update];
 }
 
 + (NSUInteger)suggestionsCount { return [MWMSearch manager].suggestionsCount; }
 + (NSUInteger)resultsCount { return [MWMSearch manager].itemsIndex.count; }
-+ (BOOL)isHotelResults { return [MWMSearch manager].isHotelResults; }
++ (BOOL)isHotelResults { return [[MWMSearch manager] isHotelResults]; }
 
 #pragma mark - Filters
 
-+ (BOOL)hasFilter { return [[MWMSearch manager].filter rules] != nullptr; }
++ (BOOL)hasFilter
+{
+  auto filter = [MWMSearch manager].filter;
+  if (!filter)
+    return NO;
+  auto const hasRules = [filter rules] != nullptr;
+  auto const hasBookingParams = ![filter availabilityParams].IsEmpty();
+  return hasRules || hasBookingParams;
+}
 
 + (MWMSearchFilterViewController *)getFilter
 {
@@ -294,9 +315,8 @@ using TObservers = NSHashTable<__kindof TObserver>;
 + (void)clearFilter
 {
   MWMSearch * manager = [MWMSearch manager];
-  [manager.filter reset];
+  manager.filter = nil;
   [manager update];
-  [manager onSearchCompleted];
 }
 
 - (void)updateItemsIndexWithBannerReload:(BOOL)reloadBanner
@@ -304,16 +324,15 @@ using TObservers = NSHashTable<__kindof TObserver>;
   auto const resultsCount = self->m_everywhereResults.GetCount();
   auto const itemsIndex = [[MWMSearchIndex alloc] initWithSuggestionsCount:self.suggestionsCount
                                                               resultsCount:resultsCount];
-  auto bannersCache = [MWMBannersCache cache];
   if (resultsCount > 0)
   {
     auto const & adsEngine = GetFramework().GetAdsEngine();
-    if (adsEngine.HasSearchBanner())
+    if (![MWMSettings adForbidden] && adsEngine.HasSearchBanner())
     {
       self.banners = [[MWMSearchBanners alloc] initWithSearchIndex:itemsIndex];
       __weak auto weakSelf = self;
-      [bannersCache
-          getWithCoreBanners:banner_helpers::MatchPriorityBanners(adsEngine.GetSearchBanners())
+      [[MWMBannersCache cache]
+          getWithCoreBanners:banner_helpers::MatchPriorityBanners(adsEngine.GetSearchBanners(), self.lastQuery)
                    cacheOnly:YES
                      loadNew:reloadBanner
                   completion:^(id<MWMBanner> ad, BOOL isAsync) {
@@ -337,7 +356,7 @@ using TObservers = NSHashTable<__kindof TObserver>;
 
 - (void)onSearchStarted
 {
-  for (TObserver observer in self.observers)
+  for (Observer observer in self.observers)
   {
     if ([observer respondsToSelector:@selector(onSearchStarted)])
       [observer onSearchStarted];
@@ -346,19 +365,8 @@ using TObservers = NSHashTable<__kindof TObserver>;
 
 - (void)onSearchCompleted
 {
-// TODO: Uncomment on release with search filters. Update to less annoying behavior.
-//
-// BOOL allCompleted = self.viewportSearchCompleted;
-// BOOL allEmpty = self.viewportResultsEmpty;
-// if (IPAD)
-// {
-//   allCompleted = allCompleted && self.everywhereSearchCompleted;
-//   allEmpty = allEmpty && m_everywhereResults.GetCount() == 0;
-// }
-// if (allCompleted && allEmpty)
-//   [[MWMAlertViewController activeAlertController] presentSearchNoResultsAlert];
-
-  for (TObserver observer in self.observers)
+  [self updateItemsIndexWithBannerReload:YES];
+  for (Observer observer in self.observers)
   {
     if ([observer respondsToSelector:@selector(onSearchCompleted)])
       [observer onSearchCompleted];
@@ -367,11 +375,44 @@ using TObservers = NSHashTable<__kindof TObserver>;
 
 - (void)onSearchResultsUpdated
 {
-  for (TObserver observer in self.observers)
+  [self updateItemsIndexWithBannerReload:NO];
+  for (Observer observer in self.observers)
   {
     if ([observer respondsToSelector:@selector(onSearchResultsUpdated)])
       [observer onSearchResultsUpdated];
   }
+}
+
+#pragma mark - MWMFrameworkDrapeObserver
+
+- (void)processViewportChangedEvent
+{
+  if (!GetFramework().GetSearchAPI().IsViewportSearchActive())
+    return;
+  if (IPAD)
+    [self searchEverywhere];
+}
+
+#pragma mark - Properties
+
+- (void)setSearchCount:(NSInteger)searchCount
+{
+  NSAssert((searchCount >= 0) &&
+               ((_searchCount == searchCount - 1) || (_searchCount == searchCount + 1)),
+           @"Invalid search count update");
+  if (_searchCount == 0)
+    [self onSearchStarted];
+  else if (searchCount == 0)
+    [self onSearchCompleted];
+  _searchCount = searchCount;
+}
+
+- (BOOL)isHotelResults
+{
+  BOOL const isEverywhereHotelResults =
+      search::HotelsClassifier::IsHotelResults(m_everywhereResults);
+  BOOL const isViewportHotelResults = search::HotelsClassifier::IsHotelResults(m_viewportResults);
+  return isEverywhereHotelResults || isViewportHotelResults;
 }
 
 @end

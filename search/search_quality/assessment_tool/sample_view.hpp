@@ -4,6 +4,8 @@
 #include "search/search_quality/assessment_tool/edits.hpp"
 #include "search/search_quality/sample.hpp"
 
+#include "geometry/point2d.hpp"
+
 #include <QtCore/QMargins>
 #include <QtWidgets/QWidget>
 
@@ -23,11 +25,12 @@ public:
 
   SampleView(QWidget * parent, Framework & framework);
 
-  void SetContents(search::Sample const & sample, bool positionAvailable);
+  void SetContents(search::Sample const & sample, bool positionAvailable,
+                   m2::PointD const & position);
   void OnSearchStarted();
   void OnSearchCompleted();
 
-  void ShowFoundResults(search::Results::ConstIter begin, search::Results::ConstIter end);
+  void AddFoundResults(search::Results::ConstIter begin, search::Results::ConstIter end);
   void ShowNonFoundResults(std::vector<search::Sample::Result> const & results,
                            std::vector<Edits::Entry> const & entries);
 
@@ -54,6 +57,9 @@ private:
   void SetEdits(ResultsView & results, Edits & edits);
   void OnRemoveNonFoundResult(int row);
 
+  void ShowUserPosition(m2::PointD const & position);
+  void HideUserPosition();
+
   Framework & m_framework;
 
   Spinner * m_spinner = nullptr;
@@ -77,4 +83,6 @@ private:
 
   QMargins m_rightAreaMargins;
   QMargins m_defaultMargins;
+
+  bool m_positionAvailable = false;
 };

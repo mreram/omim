@@ -14,11 +14,13 @@
 #include "geometry/mercator.hpp"
 
 #include "base/assert.hpp"
+#include "base/exception.hpp"
 #include "base/logging.hpp"
 #include "base/string_utils.hpp"
 
 #include <functional>
 #include <sstream>
+#include <utility>
 
 #include "private.h"
 
@@ -138,8 +140,8 @@ std::string StatisticsFolder()
 void CreateDirIfNotExist()
 {
   std::string const statsFolder = StatisticsFolder();
-  if (!GetPlatform().IsFileExistsByFullPath(statsFolder))
-    GetPlatform().MkDir(statsFolder);
+  if (!GetPlatform().IsFileExistsByFullPath(statsFolder) && !Platform::MkDirChecked(statsFolder))
+    MYTHROW(FileSystemException, ("Unable to find or create directory", statsFolder));
 }
 
 std::string MakeRemoteURL(std::string const & userId, std::string const & name, int64_t version)
@@ -158,87 +160,36 @@ std::string MakeRemoteURL(std::string const & userId, std::string const & name, 
 
 namespace local_ads
 {
-Statistics::~Statistics()
-{
-  std::lock_guard<std::mutex> lock(m_mutex);
-  ASSERT(!m_isRunning, ());
-}
-
 void Statistics::Startup()
 {
+  auto const asyncTask = [this]
   {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_isRunning)
-      return;
-    m_isRunning = true;
-  }
-  m_thread = threads::SimpleThread(&Statistics::ThreadRoutine, this);
-}
+      SendToServer();
+  };
 
-void Statistics::Teardown()
-{
+  auto const recursiveAsyncTask = [this, asyncTask]
   {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_isRunning)
-      return;
-    m_isRunning = false;
-  }
-  m_condition.notify_one();
-  m_thread.join();
-}
+    IndexMetadata();
+    asyncTask();
+    GetPlatform().RunDelayedTask(Platform::Thread::File, kSendingTimeout, asyncTask);
+  };
 
-bool Statistics::RequestEvents(std::list<Event> & events, bool & needToSend)
-{
-  std::unique_lock<std::mutex> lock(m_mutex);
-
-  bool const isTimeout = !m_condition.wait_for(lock, kSendingTimeout, [this]
+  // The first send immediately, and then every |kSendingTimeout|.
+  GetPlatform().RunTask(Platform::Thread::File, [recursiveAsyncTask]
   {
-    return !m_isRunning || !m_events.empty();
+    recursiveAsyncTask();
   });
-
-  if (!m_isRunning)
-    return false;
-
-  using namespace std::chrono;
-  needToSend = m_isFirstSending || isTimeout ||
-    (steady_clock::now() > (m_lastSending + kSendingTimeout));
-
-  events = std::move(m_events);
-  m_events.clear();
-  return true;
 }
 
 void Statistics::RegisterEvent(Event && event)
 {
-  std::lock_guard<std::mutex> lock(m_mutex);
-  if (!m_isRunning)
-    return;
-  m_events.push_back(std::move(event));
-  m_condition.notify_one();
+  RegisterEvents({std::move(event)});
 }
 
 void Statistics::RegisterEvents(std::list<Event> && events)
 {
-  std::lock_guard<std::mutex> lock(m_mutex);
-  if (!m_isRunning)
-    return;
-  m_events.splice(m_events.end(), std::move(events));
-  m_condition.notify_one();
-}
-
-void Statistics::ThreadRoutine()
-{
-  std::list<Event> events;
-  bool needToSend = false;
-  while (RequestEvents(events, needToSend))
-  {
-    ProcessEvents(events);
-    events.clear();
-
-    // Send statistics to server.
-    if (needToSend)
-      SendToServer();
-  }
+  GetPlatform().RunTask(Platform::Thread::File,
+                        std::bind(&Statistics::ProcessEvents, this, std::move(events)));
 }
 
 std::list<Event> Statistics::WriteEvents(std::list<Event> & events, std::string & fileNameToRebuild)
@@ -384,14 +335,6 @@ void Statistics::ProcessEvents(std::list<Event> & events)
 
 void Statistics::SendToServer()
 {
-  std::string userId;
-  ServerSerializer serializer;
-  {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    userId = m_userId;
-    serializer = m_serverSerializer;
-  }
-
   for (auto it = m_metadataCache.begin(); it != m_metadataCache.end();)
   {
     std::string const url = MakeRemoteURL(m_userId, it->first.first, it->first.second);
@@ -407,8 +350,8 @@ void Statistics::SendToServer()
 
     std::string contentType = "application/octet-stream";
     std::string contentEncoding = "";
-    std::vector<uint8_t> bytes = serializer != nullptr
-                                     ? serializer(events, userId, contentType, contentEncoding)
+    std::vector<uint8_t> bytes = m_serverSerializer != nullptr
+                                     ? m_serverSerializer(events, m_userId, contentType, contentEncoding)
                                      : SerializeForServer(events);
     ASSERT(!bytes.empty(), ());
 
@@ -431,15 +374,13 @@ void Statistics::SendToServer()
       ++it;
     }
   }
-  m_lastSending = std::chrono::steady_clock::now();
-  m_isFirstSending = false;
 }
 
 std::vector<uint8_t> Statistics::SerializeForServer(std::list<Event> const & events) const
 {
   ASSERT(!events.empty(), ());
 
-  // TODO: implement serialization
+  // TODO: implement binary serialization (so far, we are using json serialization).
   return std::vector<uint8_t>{1, 2, 3, 4, 5};
 }
 
@@ -533,8 +474,7 @@ void Statistics::BalanceMemory()
 
 void Statistics::SetUserId(std::string const & userId)
 {
-  std::lock_guard<std::mutex> lock(m_mutex);
-  m_userId = userId;
+  GetPlatform().RunTask(Platform::Thread::File, [this, userId] { m_userId = userId; });
 }
 
 std::list<Event> Statistics::ReadEventsForTesting(std::string const & fileName)
@@ -555,9 +495,9 @@ void Statistics::CleanupAfterTesting()
     GetPlatform().RmDirRecursively(statsFolder);
 }
 
-void Statistics::SetCustomServerSerializer(ServerSerializer && serializer)
+void Statistics::SetCustomServerSerializer(ServerSerializer const & serializer)
 {
-  std::lock_guard<std::mutex> lock(m_mutex);
-  m_serverSerializer = std::move(serializer);
+  GetPlatform().RunTask(Platform::Thread::File,
+                        [this, serializer] { m_serverSerializer = serializer; });
 }
 }  // namespace local_ads

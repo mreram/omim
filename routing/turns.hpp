@@ -4,54 +4,38 @@
 
 #include "geometry/point2d.hpp"
 
-#include "std/initializer_list.hpp"
-#include "std/limits.hpp"
-#include "std/string.hpp"
-#include "std/vector.hpp"
-
-#include "3party/osrm/osrm-backend/typedefs.h"
+#include <initializer_list>
+#include <limits>
+#include <string>
+#include <vector>
 
 namespace routing
 {
-using TNodeId = uint32_t;
-using TEdgeWeight = double;
-
-/// \brief Unique identification for a road edge between two junctions (joints).
-/// In case of OSRM it's NodeID and in case of RoadGraph (IndexGraph)
-/// it's mwm id, feature id, segment id and direction.
-struct UniNodeId
+/// \brief Unique identification for a road edge between two junctions (joints). The identifier
+/// is represented by an mwm id, a feature id, a range of segment ids [|m_startSegId|, |m_endSegId|)
+/// and a direction.
+struct SegmentRange
 {
-  enum class Type
-  {
-    Osrm,
-    Mwm,
-  };
+  friend std::string DebugPrint(SegmentRange const & segmentRange);
 
-  UniNodeId(Type type) : m_type(type) {}
-  UniNodeId(FeatureID const & featureId, uint32_t segId, bool forward)
-    : m_type(Type::Mwm), m_featureId(featureId), m_segId(segId), m_forward(forward)
-  {
-  }
-  UniNodeId(uint32_t nodeId) : m_type(Type::Osrm), m_nodeId(nodeId) {}
-  bool operator==(UniNodeId const & rh) const;
-  bool operator<(UniNodeId const & rh) const;
+  SegmentRange() = default;
+  SegmentRange(FeatureID const & featureId, uint32_t startSegId, uint32_t endSegId, bool forward);
+  bool operator==(SegmentRange const & rh) const;
+  bool operator<(SegmentRange const & rh) const;
   void Clear();
-  uint32_t GetNodeId() const;
+  bool IsEmpty() const;
   FeatureID const & GetFeature() const;
-  uint32_t GetSegId() const;
-  bool IsForward() const;
+  /// \returns true if the instance of SegmentRange is correct.
+  bool IsCorrect() const;
 
 private:
-  Type m_type;
-  /// \note In case of OSRM unique id is kept in |m_featureId.m_index|.
-  /// So |m_featureId.m_mwmId|, |m_segId| and |m_forward| have default values.
-  FeatureID m_featureId;  // |m_featureId.m_index| is NodeID for OSRM.
-  uint32_t m_segId = 0;   // Not valid for OSRM.
-  bool m_forward = true;  // Segment direction in |m_featureId|.
-  NodeID m_nodeId = SPECIAL_NODEID;
+  FeatureID m_featureId;
+  // Note. If SegmentRange represents two directional feature |m_endSegId| is greater
+  // than |m_startSegId| if |m_forward| == true.
+  uint32_t m_startSegId = 0; // The first segment index of SegmentRange.
+  uint32_t m_endSegId = 0;   // The last segment index of SegmentRange.
+  bool m_forward = true;     // Segment direction in |m_featureId|.
 };
-
-string DebugPrint(UniNodeId::Type type);
 
 namespace turns
 {
@@ -67,9 +51,9 @@ double constexpr kFeaturesNearTurnMeters = 3.0;
  * \warning The values of TurnDirection shall be synchronized with values of TurnDirection enum in
  * java.
  */
-enum class TurnDirection
+enum class CarDirection
 {
-  NoTurn = 0,
+  None = 0,
   GoStraight,
 
   TurnRight,
@@ -94,7 +78,7 @@ enum class TurnDirection
   Count  /**< This value is used for internals only. */
 };
 
-string DebugPrint(TurnDirection const l);
+std::string DebugPrint(CarDirection const l);
 
 /*!
  * \warning The values of PedestrianDirectionType shall be synchronized with values in java
@@ -110,7 +94,7 @@ enum class PedestrianDirection
   Count  /**< This value is used for internals only. */
 };
 
-string DebugPrint(PedestrianDirection const l);
+std::string DebugPrint(PedestrianDirection const l);
 
 /*!
  * \warning The values of LaneWay shall be synchronized with values of LaneWay enum in java.
@@ -131,9 +115,9 @@ enum class LaneWay
   Count  /**< This value is used for internals only. */
 };
 
-string DebugPrint(LaneWay const l);
+std::string DebugPrint(LaneWay const l);
 
-typedef vector<LaneWay> TSingleLane;
+typedef std::vector<LaneWay> TSingleLane;
 
 struct SingleLaneInfo
 {
@@ -141,31 +125,31 @@ struct SingleLaneInfo
   bool m_isRecommended = false;
 
   SingleLaneInfo() = default;
-  SingleLaneInfo(initializer_list<LaneWay> const & l) : m_lane(l) {}
+  SingleLaneInfo(std::initializer_list<LaneWay> const & l) : m_lane(l) {}
   bool operator==(SingleLaneInfo const & other) const;
 };
 
-string DebugPrint(SingleLaneInfo const & singleLaneInfo);
+std::string DebugPrint(SingleLaneInfo const & singleLaneInfo);
 
 struct TurnItem
 {
   TurnItem()
-      : m_index(numeric_limits<uint32_t>::max()),
-        m_turn(TurnDirection::NoTurn),
+      : m_index(std::numeric_limits<uint32_t>::max()),
+        m_turn(CarDirection::None),
         m_exitNum(0),
         m_keepAnyway(false),
         m_pedestrianTurn(PedestrianDirection::None)
   {
   }
 
-  TurnItem(uint32_t idx, TurnDirection t, uint32_t exitNum = 0)
+  TurnItem(uint32_t idx, CarDirection t, uint32_t exitNum = 0)
       : m_index(idx), m_turn(t), m_exitNum(exitNum), m_keepAnyway(false)
       , m_pedestrianTurn(PedestrianDirection::None)
   {
   }
 
   TurnItem(uint32_t idx, PedestrianDirection p)
-      : m_index(idx), m_turn(TurnDirection::NoTurn), m_exitNum(0), m_keepAnyway(false)
+      : m_index(idx), m_turn(CarDirection::None), m_exitNum(0), m_keepAnyway(false)
       , m_pedestrianTurn(p)
   {
   }
@@ -178,12 +162,12 @@ struct TurnItem
            m_pedestrianTurn == rhs.m_pedestrianTurn;
   }
 
-  uint32_t m_index;               /*!< Index of point on polyline (number of segment + 1). */
-  TurnDirection m_turn;           /*!< The turn instruction of the TurnItem */
-  vector<SingleLaneInfo> m_lanes; /*!< Lane information on the edge before the turn. */
-  uint32_t m_exitNum;             /*!< Number of exit on roundabout. */
-  string m_sourceName;            /*!< Name of the street which the ingoing edge belongs to */
-  string m_targetName;            /*!< Name of the street which the outgoing edge belongs to */
+  uint32_t m_index;                    /*!< Index of point on route polyline (number of segment + 1). */
+  CarDirection m_turn;                 /*!< The turn instruction of the TurnItem */
+  std::vector<SingleLaneInfo> m_lanes; /*!< Lane information on the edge before the turn. */
+  uint32_t m_exitNum;                  /*!< Number of exit on roundabout. */
+  std::string m_sourceName;            /*!< Name of the street which the ingoing edge belongs to */
+  std::string m_targetName;            /*!< Name of the street which the outgoing edge belongs to */
   /*!
    * \brief m_keepAnyway is true if the turn shall not be deleted
    * and shall be demonstrated to an end user.
@@ -196,23 +180,29 @@ struct TurnItem
   PedestrianDirection m_pedestrianTurn;
 };
 
-string DebugPrint(TurnItem const & turnItem);
+std::string DebugPrint(TurnItem const & turnItem);
 
 struct TurnItemDist
 {
+  TurnItemDist(TurnItem const & turnItem, double distMeters)
+    : m_turnItem(turnItem), m_distMeters(distMeters)
+  {
+  }
+  TurnItemDist() = default;
+
   TurnItem m_turnItem;
-  double m_distMeters;
+  double m_distMeters = 0.0;
 };
 
-string DebugPrint(TurnItemDist const & turnItemDist);
+std::string DebugPrint(TurnItemDist const & turnItemDist);
 
-string const GetTurnString(TurnDirection turn);
+std::string const GetTurnString(CarDirection turn);
 
-bool IsLeftTurn(TurnDirection t);
-bool IsRightTurn(TurnDirection t);
-bool IsLeftOrRightTurn(TurnDirection t);
-bool IsStayOnRoad(TurnDirection t);
-bool IsGoStraightOrSlightTurn(TurnDirection t);
+bool IsLeftTurn(CarDirection t);
+bool IsRightTurn(CarDirection t);
+bool IsLeftOrRightTurn(CarDirection t);
+bool IsStayOnRoad(CarDirection t);
+bool IsGoStraightOrSlightTurn(CarDirection t);
 
 /*!
  * \param l A variant of going along a lane.
@@ -221,7 +211,7 @@ bool IsGoStraightOrSlightTurn(TurnDirection t);
  * when @l equals to LaneWay::Right and @t equals to TurnDirection::TurnRight.
  * Otherwise it returns false.
  */
-bool IsLaneWayConformedTurnDirection(LaneWay l, TurnDirection t);
+bool IsLaneWayConformedTurnDirection(LaneWay l, CarDirection t);
 
 /*!
  * \param l A variant of going along a lane.
@@ -230,7 +220,7 @@ bool IsLaneWayConformedTurnDirection(LaneWay l, TurnDirection t);
  * when @l equals to LaneWay::Right and @t equals to TurnDirection::TurnSlightRight.
  * Otherwise it returns false.
  */
-bool IsLaneWayConformedTurnDirectionApproximately(LaneWay l, TurnDirection t);
+bool IsLaneWayConformedTurnDirectionApproximately(LaneWay l, CarDirection t);
 
 /*!
  * \brief Parse lane information which comes from @lanesString
@@ -240,9 +230,9 @@ bool IsLaneWayConformedTurnDirectionApproximately(LaneWay l, TurnDirection t);
  * Note 1: if @lanesString is empty returns false.
  * Note 2: @laneString is passed by value on purpose. It'll be used(changed) in the method.
  */
-bool ParseLanes(string lanesString, vector<SingleLaneInfo> & lanes);
-void SplitLanes(string const & lanesString, char delimiter, vector<string> & lanes);
-bool ParseSingleLane(string const & laneString, char delimiter, TSingleLane & lane);
+bool ParseLanes(std::string lanesString, std::vector<SingleLaneInfo> & lanes);
+void SplitLanes(std::string const & lanesString, char delimiter, std::vector<std::string> & lanes);
+bool ParseSingleLane(std::string const & laneString, char delimiter, TSingleLane & lane);
 
 /*!
  * \returns pi minus angle from vector [junctionPoint, ingoingPoint]

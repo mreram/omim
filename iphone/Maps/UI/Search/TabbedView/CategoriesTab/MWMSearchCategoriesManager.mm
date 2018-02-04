@@ -1,28 +1,22 @@
 #import "MWMSearchCategoriesManager.h"
-#import "AppInfo.h"
+#import <MyTrackerSDK/MRMyTracker.h>
 #import "MWMSearchCategoryCell.h"
 #import "Statistics.h"
 #import "SwiftBridge.h"
 
-#include "search/displayed_categories.hpp"
+#include "Framework.h"
 
-#include "base/macros.hpp"
+extern NSString * const kLuggageCategory = @"luggagehero";
 
 @implementation MWMSearchCategoriesManager
 {
   vector<string> m_categories;
 }
 
-- (instancetype)init
-{
-  self = [super init];
-  if (self)
-    m_categories = search::DisplayedCategories::GetKeys();
-  return self;
-}
-
 - (void)attachCell:(MWMSearchTabbedCollectionViewCell *)cell
 {
+  if (m_categories.empty())
+    m_categories = GetFramework().GetDisplayedCategories().GetKeys();
   [cell removeNoResultsView];
   UITableView * tableView = cell.tableView;
   tableView.estimatedRowHeight = 44.;
@@ -35,6 +29,7 @@
   [tableView reloadData];
 }
 
+- (void)resetCategories { m_categories.clear(); }
 #pragma mark - UITableViewDataSource
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
@@ -54,6 +49,18 @@
 
 #pragma mark - UITableViewDelegate
 
+- (void)tableView:(UITableView *)tableView
+      willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath
+{
+  NSString * string = @(m_categories[indexPath.row].c_str());
+  if ([string isEqualToString:kLuggageCategory])
+  {
+    [MRMyTracker trackEventWithName:@"Search_SponsoredCategory_shown_LuggageHero"];
+    [Statistics logEvent:kStatSearchSponsoredShow withParameters:@{kStatProvider : kStatLuggageHero}];
+  }
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
   NSString * string = @(m_categories[indexPath.row].c_str());
@@ -63,6 +70,12 @@
   [delegate searchText:[L(string) stringByAppendingString:@" "]
         forInputLocale:[[AppInfo sharedInfo] languageId]];
   [delegate dismissKeyboard];
+  if ([string isEqualToString:kLuggageCategory])
+  {
+    delegate.state = MWMSearchManagerStateMapSearch;
+    [MRMyTracker trackEventWithName:@"Search_SponsoredCategory_selected_LuggageHero"];
+    [Statistics logEvent:kStatSearchSponsoredSelect withParameters:@{kStatProvider : kStatLuggageHero}];
+  }
 }
 
 @end

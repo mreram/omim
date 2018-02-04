@@ -1,11 +1,5 @@
 #import "MWMDefaultAlert.h"
-#import "MWMAlertViewController.h"
-#import "MWMDefaultAlert_Protected.h"
-#import "MapViewController.h"
-#import "MapsAppDelegate.h"
 #import "Statistics.h"
-#import "UIButton+RuntimeAttributes.h"
-#import "UILabel+RuntimeAttributes.h"
 
 #include "Framework.h"
 
@@ -147,6 +141,16 @@ static NSString * const kDefaultAlertNibName = @"MWMDefaultAlert";
                      statisticsEvent:@"Start Point Not Found Alert"];
 }
 
++ (instancetype)intermediatePointNotFoundAlert
+{
+  return [self defaultAlertWithTitle:L(@"dialog_routing_change_intermediate")
+                             message:L(@"dialog_routing_intermediate_not_determined")
+                    rightButtonTitle:L(@"ok")
+                     leftButtonTitle:nil
+                   rightButtonAction:nil
+                     statisticsEvent:@"Intermediate Point Not Found Alert"];
+}
+
 + (instancetype)internalRoutingErrorAlert
 {
   NSString * message =
@@ -160,7 +164,7 @@ static NSString * const kDefaultAlertNibName = @"MWMDefaultAlert";
                      statisticsEvent:@"Internal Routing Error Alert"];
 }
 
-+ (instancetype)incorrectFeauturePositionAlert
++ (instancetype)incorrectFeaturePositionAlert
 {
   return [self defaultAlertWithTitle:L(@"dialog_incorrect_feature_position")
                              message:L(@"message_invalid_feature_position")
@@ -205,7 +209,7 @@ static NSString * const kDefaultAlertNibName = @"MWMDefaultAlert";
 + (instancetype)noCurrentPositionAlert
 {
   NSString * message =
-      [NSString stringWithFormat:@"%@\n\n%@", L(@"common_current_location_unknown_dialog"),
+      [NSString stringWithFormat:@"%@\n\n%@", L(@"dialog_routing_error_location_not_found"),
                                  L(@"dialog_routing_location_turn_wifi")];
   return [self defaultAlertWithTitle:L(@"dialog_routing_check_gps")
                              message:message
@@ -389,8 +393,8 @@ static NSString * const kDefaultAlertNibName = @"MWMDefaultAlert";
                       statisticsEvent:(nonnull NSString *)statisticsEvent
 {
   [Statistics logEvent:statisticsEvent withParameters:@{kStatAction : kStatOpen}];
-  MWMDefaultAlert * alert = [
-      [[NSBundle mainBundle] loadNibNamed:kDefaultAlertNibName owner:self options:nil] firstObject];
+  MWMDefaultAlert * alert =
+      [NSBundle.mainBundle loadNibNamed:kDefaultAlertNibName owner:self options:nil].firstObject;
   alert.titleLabel.text = title;
   alert.messageLabel.text = message;
   if (!message)

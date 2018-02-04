@@ -3,7 +3,11 @@
 #import "MWMSearchItemType.h"
 #import "MWMSearchObserver.h"
 
-#include "search/result.hpp"
+namespace search
+{
+class Result;
+struct ProductInfo;
+}  // namespace search
 
 @interface MWMSearch : NSObject
 
@@ -18,13 +22,13 @@
 + (MWMSearchItemType)resultTypeWithRow:(NSUInteger)row;
 + (NSUInteger)containerIndexWithRow:(NSUInteger)row;
 + (search::Result const &)resultWithContainerIndex:(NSUInteger)index;
-+ (BOOL)isLocalAdsWithContainerIndex:(NSUInteger)index;
++ (search::ProductInfo const &)productInfoWithContainerIndex:(NSUInteger)index;
 + (id<MWMBanner>)adWithContainerIndex:(NSUInteger)index;
++ (BOOL)isBookingAvailableWithContainerIndex:(NSUInteger)index;
 
 + (void)update;
 + (void)clear;
 
-+ (BOOL)isSearchOnMap;
 + (void)setSearchOnMap:(BOOL)searchOnMap;
 
 + (NSUInteger)suggestionsCount;
